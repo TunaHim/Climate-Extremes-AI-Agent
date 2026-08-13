@@ -1,17 +1,11 @@
-# Climate DT Precipitation Extremes Analysis
+# Precipitation Extremes Analysis
 
-AI-assisted diagnostic workflow for analysing precipitation extremes in DestinE Climate DT simulations.
-
-This project is built as a demonstrator for a scientist position in **Climate Data Analysis and AI Methods** for the EU **Destination Earth** Climate Digital Twin initiative.
-
-## Scientific question
-
-What is the added value of kilometre-scale Climate DT simulations (IFS-FESOM, IFS-NEMO, ICON) for representing precipitation extremes compared to ERA5 reanalysis?
+AI-assisted diagnostic workflow for analysing precipitation extremes
 
 ## Project structure
 
 ```
-ClimateDT_PrecipExtremes/
+PrecipExtremes/
 ├── assets/                  # Demo figures shipped with the repo for Streamlit Cloud
 ├── data/                    # Downloaded GRIB/NetCDF files (gitignored)
 │   └── demo/                # Small demo datasets (committed, < 25 MB total)
@@ -41,17 +35,6 @@ conda activate climate-dt-precip
 
 ### 2. Download data
 
-#### DestinE Climate DT (IFS-FESOM precipitation)
-
-```bash
-python scripts/download_destine_precip.py
-```
-
-#### ERA5 reference
-
-```bash
-python scripts/download_era5_precip.py
-```
 
 ### 3. Run diagnostics
 
@@ -88,7 +71,7 @@ This is a prototype step towards fully autonomous climate diagnostic agents.
 
 ## Deployment (Streamlit Community Cloud)
 
-The repository is configured for a free public deployment so you can share a clickable link in your CV.
+The repository is configured for a free public deployment.
 
 ### What ships with the repo
 
@@ -134,15 +117,6 @@ The following lightweight assets are committed under version control (total ~15 
    - In the app settings, add `GEMINI_API_KEY` as a secret.
    - Deploy.
 
-4. **Share the link**
-
-   Once deployed you will get a URL like:
-
-   ```text
-   https://<your-repo-name>.streamlit.app
-   ```
-
-   Put this link at the top of your CV and cover letter.
 
 ### Local run
 
