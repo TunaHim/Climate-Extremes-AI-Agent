@@ -1,0 +1,7 @@
+{
+  "diagnostic": "mean daily precipitation bias",
+  "variable": "pr",
+  "models": "MPI-ESM1-2-HR (CMIP6) vs CPC",
+  "period": "2013",
+  "units": "mm/day"
+}

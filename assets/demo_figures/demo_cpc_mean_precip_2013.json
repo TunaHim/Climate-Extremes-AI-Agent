@@ -1,0 +1,7 @@
+{
+  "diagnostic": "mean daily precipitation",
+  "variable": "precip",
+  "model": "CPC (regridded to CMIP6 grid)",
+  "period": "2013",
+  "units": "mm/day"
+}

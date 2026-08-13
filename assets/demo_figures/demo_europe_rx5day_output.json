@@ -1,0 +1,13 @@
+{
+  "variable": "precipitation",
+  "index": "RX5day",
+  "units": "mm",
+  "dataset": "C:\\Users\\LENOVO\\Desktop\\Com_AWI_2026\\AWI_Coding\\ClimateDT_PrecipExtremes\\data\\demo\\cpc_europe_2013.nc",
+  "region_bbox": [
+    -15.0,
+    45.0,
+    35.0,
+    75.0
+  ],
+  "diagnostic": "RX5day over selected region"
+}

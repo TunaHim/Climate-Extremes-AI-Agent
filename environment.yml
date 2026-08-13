@@ -1,0 +1,29 @@
+name: climate-dt-precip
+channels:
+  - conda-forge
+  - defaults
+dependencies:
+  - python=3.11
+  - numpy
+  - pandas
+  - xarray
+  - dask
+  - scipy
+  - matplotlib
+  - cartopy
+  - cfgrib
+  - netCDF4
+  - zarr<3.0
+  - numcodecs
+  - requests
+  - tqdm
+  - pyyaml
+  - pytest
+  - pip
+  - pip:
+    - destinelab
+    - google-generativeai
+    - openai
+    - ollama
+    - streamlit
+    - python-dotenv

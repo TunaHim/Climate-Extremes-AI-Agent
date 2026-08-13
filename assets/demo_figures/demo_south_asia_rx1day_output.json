@@ -1,0 +1,13 @@
+{
+  "variable": "precipitation",
+  "index": "RX1day",
+  "units": "mm",
+  "dataset": "C:\\Users\\LENOVO\\Desktop\\Com_AWI_2026\\AWI_Coding\\ClimateDT_PrecipExtremes\\data\\demo\\cpc_south_asia_2013.nc",
+  "region_bbox": [
+    60.0,
+    100.0,
+    5.0,
+    35.0
+  ],
+  "diagnostic": "RX1day over selected region"
+}

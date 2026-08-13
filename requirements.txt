@@ -1,0 +1,49 @@
+# Core scientific stack
+numpy>=1.24.0
+pandas>=2.0.0
+xarray>=2023.6.0
+dask>=2023.6.0
+scipy>=1.10.0
+scikit-learn>=1.3.0
+
+# Geoscience / I/O
+cfgrib>=0.9.10
+netCDF4>=1.6.0
+zarr>=2.18.0,<3.0.0
+numcodecs<0.16
+rasterio>=1.3.0
+cartopy>=0.22.0
+matplotlib>=3.7.0
+seaborn>=0.12.0
+
+# Regridding
+xesmf>=0.8.0
+
+# Climate indices
+xclim>=0.45.0
+
+# HPC / data access
+requests>=2.31.0
+urllib3>=2.0.0
+tqdm>=4.65.0
+
+# DestinE / ECMWF tools
+destinelab
+earthkit-data
+polytope-client
+
+# AI / LLM
+google-generativeai>=0.7.0
+openai>=1.0.0
+ollama>=0.3.0
+langchain>=0.2.0
+langchain-openai>=0.1.0
+
+# Dashboard
+streamlit>=1.35.0
+pillow>=10.0.0
+
+# Misc
+python-dotenv>=1.0.0
+pyyaml>=6.0
+pytest>=7.4.0

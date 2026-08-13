@@ -1,0 +1,7 @@
+{
+  "diagnostic": "mean daily precipitation",
+  "variable": "pr",
+  "model": "MPI-ESM1-2-HR (CMIP6)",
+  "period": "2013",
+  "units": "mm/day"
+}
