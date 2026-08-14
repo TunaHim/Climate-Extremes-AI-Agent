@@ -112,7 +112,7 @@ def run_climate_agent(user_query: str, api_key: str | None = None) -> str:
     genai.configure(api_key=api_key)
 
     model = genai.GenerativeModel(
-        model_name="gemini-2.0-flash",
+        model_name="gemini-flash-latest",
         tools=[compute_and_plot_extreme],
     )
 
