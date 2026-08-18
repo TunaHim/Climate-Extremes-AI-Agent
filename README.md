@@ -16,7 +16,7 @@ Supported LLM providers:
 
 - **Gemini** (Google)
 - **Groq** (OpenAI-compatible endpoint)
-- **Ollama** for local figure interpretation
+- **Ollama** for local figure interpretation. One needs to download the local LLMs to make this work. 
 
 The agents work best on questions that can be answered from the provided demo datasets (extreme indices, climatology, bias, trends, point comparisons). Provider behaviour differs:
 
@@ -41,7 +41,7 @@ PrecipExtremes/
 ├── notebooks/               # Exploratory analysis
 ├── dashboard/               # Streamlit app
 ├── scripts/                 # Download and batch processing scripts
-├── tests/                   # Unit tests
+├── tests/                   # Unit tests (not included here)
 ├── environment.yml          # Conda environment
 ├── requirements.txt         # Pip requirements
 └── README.md
@@ -94,56 +94,6 @@ The repository ships with lightweight demo data (~15 MB) so the Streamlit app wo
 | `data/demo/cmip6_global_monthly_2013.nc` | ~3.6 MB | CMIP6 monthly means for global maps |
 | `data/demo/cpc_global_monthly_2013_regridded.nc` | ~3.6 MB | CPC monthly means on the CMIP6 grid |
 | `assets/demo_figures/*.png` | ~2 MB | Pre-generated mean, bias, and extreme-index maps |
-
-## Deployment (Streamlit Community Cloud)
-
-### 1. Push to GitHub
-
-```bash
-git init
-git add .
-git commit -m "Initial deployment-ready version"
-git remote add origin https://github.com/<your-username>/<your-repo>.git
-git push -u origin main
-```
-
-Note: `.gitignore` excludes large raw data files (`data/cmip6/`, `data/cpc/`, `figures/`) and API secrets. Only `data/demo/` and `assets/` are committed.
-
-### 2. Add API keys
-
-Copy the template:
-
-```bash
-cp dashboard/.streamlit/secrets.toml.example dashboard/.streamlit/secrets.toml
-```
-
-Edit `dashboard/.streamlit/secrets.toml` and add your keys:
-
-- `GEMINI_API_KEY` for the Gemini agent.
-- `GROQ_API_KEY` if you want to use the Groq agent.
-
-### 3. Deploy on Streamlit Cloud
-
-- Go to [share.streamlit.io](https://share.streamlit.io).
-- Connect your GitHub account and select the repository.
-- Set the main file path to `dashboard/streamlit_app.py`.
-- Add `GEMINI_API_KEY` and optionally `GROQ_API_KEY` as secrets.
-- Deploy.
-
-Once deployed you will get a URL like:
-
-```text
-https://<your-repo-name>.streamlit.app
-```
-
-## Local run
-
-```bash
-conda activate climate-dt-precip
-streamlit run dashboard/streamlit_app.py
-```
-
-Open [http://localhost:8501](http://localhost:8501).
 
 ## License
 
