@@ -1,4 +1,4 @@
-"""AI figure interpretation with Gemini and Ollama."""
+"""AI figure interpretation with Gemini, Groq and Ollama."""
 
 import base64
 import json
@@ -92,6 +92,61 @@ def ask_ollama(image_path: Path, prompt: str, model_name: str = "ministral3", lo
         return f"❌ Error calling Ollama: {exc}"
 
 
+def ask_groq(image_path: Path, prompt: str, model_name: str = "llama-3.2-11b-vision-preview") -> str:
+    """Ask a Groq vision model to interpret a figure.
+
+    Uses the OpenAI-compatible chat completions endpoint on Groq.
+    """
+    try:
+        from openai import OpenAI
+    except ImportError as exc:
+        raise ImportError(
+            "openai is required for Groq interpretation. Install with: pip install openai"
+        ) from exc
+
+    try:
+        import streamlit as st
+        api_key = st.secrets.get("GROQ_API_KEY", None)
+    except Exception:
+        import os
+        api_key = os.getenv("GROQ_API_KEY")
+
+    if not api_key:
+        return "❌ No GROQ_API_KEY found. Add it to Streamlit secrets or your environment."
+
+    metadata = _load_metadata(image_path)
+    context = ""
+    if metadata:
+        context = "\n\nFigure metadata:\n" + json.dumps(metadata, indent=2)
+
+    client = OpenAI(
+        api_key=api_key,
+        base_url="https://api.groq.com/openai/v1",
+    )
+
+    encoded = _encode_image(image_path)
+    data_url = f"data:image/png;base64,{encoded}"
+
+    try:
+        response = client.chat.completions.create(
+            model=model_name,
+            messages=[
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "text", "text": prompt + context},
+                        {"type": "image_url", "image_url": {"url": data_url}},
+                    ],
+                }
+            ],
+            temperature=0.4,
+            max_tokens=1024,
+        )
+        return response.choices[0].message.content or "The model returned an empty response."
+    except Exception as exc:
+        return f"❌ Error calling Groq: {exc}"
+
+
 def interpret_figure(
     image_path: Path,
     prompt: str,
@@ -100,6 +155,8 @@ def interpret_figure(
     """Dispatch interpretation to the selected model."""
     if "gemini" in model.lower():
         return ask_gemini(image_path, prompt)
+    if "groq" in model.lower():
+        return ask_groq(image_path, prompt)
     if "ministral" in model.lower():
         return ask_ollama(image_path, prompt, model_name="ministral3")
     if "gemma" in model.lower():
