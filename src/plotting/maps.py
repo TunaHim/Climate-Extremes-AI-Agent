@@ -7,6 +7,7 @@ import cartopy.feature as cfeature
 import matplotlib.pyplot as plt
 import numpy as np
 import xarray as xr
+from cartopy.mpl.ticker import LatitudeFormatter, LongitudeFormatter
 
 
 def _guess_lonlat(da: xr.DataArray):
@@ -42,8 +43,8 @@ def _is_global(da: xr.DataArray) -> bool:
 
 
 def _choose_projection(da: xr.DataArray) -> ccrs.Projection:
-    """Choose Robinson for global maps, PlateCarree for regional maps."""
-    return ccrs.Robinson() if _is_global(da) else ccrs.PlateCarree()
+    """Use PlateCarree for all maps so longitude/latitude axes can be labelled."""
+    return ccrs.PlateCarree()
 
 
 def _prepare_geo_axes(
@@ -61,6 +62,28 @@ def _prepare_geo_axes(
     return ax
 
 
+def _add_lat_lon_ticks(
+    ax: plt.Axes, projection: ccrs.Projection, labelsize: int = 10
+) -> None:
+    """Add sensible longitude/latitude tick labels on PlateCarree axes."""
+    if not isinstance(projection, ccrs.PlateCarree):
+        return
+    x0, x1 = ax.get_xlim()
+    y0, y1 = ax.get_ylim()
+    x_range = x1 - x0
+    y_range = y1 - y0
+    # 45-degree spacing for global maps, 10/5 for regional
+    dx = 5 if x_range <= 25 else (10 if x_range <= 120 else 45)
+    dy = 5 if y_range <= 25 else (10 if y_range <= 60 else 30)
+    xticks = np.arange(dx * np.floor(x0 / dx), dx * np.ceil(x1 / dx) + dx, dx)
+    yticks = np.arange(dy * np.floor(y0 / dy), dy * np.ceil(y1 / dy) + dy, dy)
+    ax.set_xticks(xticks[(xticks >= x0) & (xticks <= x1)], crs=ccrs.PlateCarree())
+    ax.set_yticks(yticks[(yticks >= y0) & (yticks <= y1)], crs=ccrs.PlateCarree())
+    ax.xaxis.set_major_formatter(LongitudeFormatter())
+    ax.yaxis.set_major_formatter(LatitudeFormatter())
+    ax.tick_params(axis="both", labelsize=labelsize)
+
+
 def plot_map(
     da: xr.DataArray,
     title: str = "",
@@ -71,11 +94,15 @@ def plot_map(
     coastline_resolution: str = "110m",
     figsize: tuple = (10, 6),
     projection: ccrs.Projection | None = None,
+    vmin: float | None = None,
+    vmax: float | None = None,
+    labelsize: int = 10,
+    titlesize: int | None = None,
+    cbar_labelsize: int | None = None,
 ) -> plt.Figure:
     """Plot a global/regional map of a 2D DataArray.
 
-    Regional maps use PlateCarree; near-global maps automatically switch to
-    Robinson unless a projection is explicitly supplied.
+    All maps use PlateCarree so longitude/latitude axes can be labelled.
     """
     da = _lon_to_180(da)
     if projection is None:
@@ -98,6 +125,8 @@ def plot_map(
         levels=levels,
         cmap=cmap,
         extend=extend,
+        vmin=vmin,
+        vmax=vmax,
         transform=ccrs.PlateCarree(),
     )
 
@@ -106,11 +135,21 @@ def plot_map(
     ax.add_feature(cfeature.LAKES, alpha=0.5)
     ax.add_feature(cfeature.RIVERS, alpha=0.5)
 
-    cbar = plt.colorbar(im, ax=ax, orientation="vertical", pad=0.02, shrink=0.8)
-    if cbar_label:
-        cbar.set_label(cbar_label)
+    fontsize = labelsize
+    title_font = titlesize if titlesize is not None else fontsize
+    cbar_font = cbar_labelsize if cbar_labelsize is not None else fontsize
 
-    ax.set_title(title)
+    ax.set_xlabel("Longitude", fontsize=fontsize)
+    ax.set_ylabel("Latitude", fontsize=fontsize)
+
+    _add_lat_lon_ticks(ax, projection, labelsize=fontsize)
+
+    cbar = plt.colorbar(im, ax=ax, orientation="vertical", pad=0.02, shrink=0.8)
+    cbar.ax.tick_params(labelsize=cbar_font)
+    if cbar_label:
+        cbar.set_label(cbar_label, fontsize=cbar_font)
+
+    ax.set_title(title, fontsize=title_font)
     plt.tight_layout()
     return fig
 
@@ -123,11 +162,12 @@ def plot_bias_map(
     cbar_label: str = "",
     figsize: tuple = (10, 6),
     projection: ccrs.Projection | None = None,
+    vmin: float | None = None,
+    vmax: float | None = None,
 ) -> plt.Figure:
     """Plot a bias map with diverging color scale.
 
-    Regional maps use PlateCarree; near-global maps automatically switch to
-    Robinson unless a projection is explicitly supplied.
+    All maps use PlateCarree so longitude/latitude axes can be labelled.
     """
     da = _lon_to_180(da)
     if projection is None:
@@ -136,11 +176,14 @@ def plot_bias_map(
     else:
         is_global = isinstance(projection, (ccrs.Robinson, ccrs.Mollweide))
 
-    vmax = float(np.nanmax(np.abs(da.values)))
-    if symmetric:
-        vmin = -vmax
-    else:
-        vmin = float(np.nanmin(da.values))
+    if vmin is None or vmax is None:
+        auto_vmax = float(np.nanmax(np.abs(da.values)))
+        if symmetric:
+            vmin = -auto_vmax
+            vmax = auto_vmax
+        else:
+            vmin = float(np.nanmin(da.values))
+            vmax = auto_vmax
 
     fig = plt.figure(figsize=figsize)
     ax = _prepare_geo_axes(fig, projection, is_global=is_global)
@@ -163,9 +206,14 @@ def plot_bias_map(
     ax.coastlines(resolution="110m")
     ax.add_feature(cfeature.BORDERS, linestyle=":")
 
+    ax.set_xlabel("Longitude")
+    ax.set_ylabel("Latitude")
+
     cbar = plt.colorbar(im, ax=ax, orientation="vertical", pad=0.02, shrink=0.8)
     if cbar_label:
         cbar.set_label(cbar_label)
+
+    _add_lat_lon_ticks(ax, projection)
 
     ax.set_title(title)
     plt.tight_layout()
@@ -180,11 +228,15 @@ def plot_three_panel_climatology(
     period: str = "",
     cbar_label: str = "mm/day",
     figsize: tuple = (18, 5),
+    vmin: float | None = None,
+    vmax: float | None = None,
+    bias_vmin: float | None = None,
+    bias_vmax: float | None = None,
 ) -> plt.Figure:
     """Plot a 3-panel figure: observed, model, and model-minus-observed bias.
 
-    The first two panels share a common color scale. Global panels are drawn
-    in Robinson projection; regional panels in PlateCarree.
+    The first two panels share a common color scale. All panels use PlateCarree
+    so longitude/latitude axes can be labelled.
     """
     da_cpc = _lon_to_180(da_cpc)
     da_cmip6 = _lon_to_180(da_cmip6)
@@ -203,9 +255,10 @@ def plot_three_panel_climatology(
     cmaps = ["YlGnBu", "YlGnBu"]
 
     # Shared colour scale for the two mean panels
-    all_values = np.concatenate([np.ravel(da_cpc.values), np.ravel(da_cmip6.values)])
-    vmin = float(np.nanmin(all_values))
-    vmax = float(np.nanmax(all_values))
+    if vmin is None or vmax is None:
+        all_values = np.concatenate([np.ravel(da_cpc.values), np.ravel(da_cmip6.values)])
+        vmin = float(np.nanmin(all_values)) if vmin is None else vmin
+        vmax = float(np.nanmax(all_values)) if vmax is None else vmax
 
     for i, (da, t, cmap) in enumerate(zip(data_panels, titles, cmaps), start=1):
         ax = _prepare_geo_axes(fig, projection, nrows=1, ncols=3, index=i, is_global=is_global)
@@ -223,13 +276,22 @@ def plot_three_panel_climatology(
         ax.coastlines(resolution="110m")
         ax.add_feature(cfeature.BORDERS, linestyle=":")
         ax.set_title(t)
+
+        ax.set_xlabel("Longitude")
+        ax.set_ylabel("Latitude")
+
+        _add_lat_lon_ticks(ax, projection)
+
         if cbar_label:
             cbar = plt.colorbar(im, ax=ax, orientation="vertical", pad=0.02, shrink=0.8)
             cbar.set_label(cbar_label)
 
     # Bias panel
     ax = _prepare_geo_axes(fig, projection, nrows=1, ncols=3, index=3, is_global=is_global)
-    vmax = float(np.nanmax(np.abs(da_bias.values)))
+    if bias_vmin is None or bias_vmax is None:
+        auto_vmax = float(np.nanmax(np.abs(da_bias.values)))
+        bias_vmin = -auto_vmax if bias_vmin is None else bias_vmin
+        bias_vmax = auto_vmax if bias_vmax is None else bias_vmax
     lon_name, lat_name = _guess_lonlat(da_bias)
     im = ax.contourf(
         da_bias[lon_name].values,
@@ -237,14 +299,20 @@ def plot_three_panel_climatology(
         da_bias.values,
         levels=20,
         cmap="RdBu",
-        vmin=-vmax,
-        vmax=vmax,
+        vmin=bias_vmin,
+        vmax=bias_vmax,
         transform=ccrs.PlateCarree(),
     )
     ax.coastlines(resolution="110m")
     ax.add_feature(cfeature.BORDERS, linestyle=":")
     bias_title = f"Bias: CMIP6 minus CPC{f' — {region}' if region else ''}"
     ax.set_title(bias_title)
+
+    ax.set_xlabel("Longitude")
+    ax.set_ylabel("Latitude")
+
+    _add_lat_lon_ticks(ax, projection)
+
     if cbar_label:
         cbar = plt.colorbar(im, ax=ax, orientation="vertical", pad=0.02, shrink=0.8)
         cbar.set_label(cbar_label)
