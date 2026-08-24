@@ -8,10 +8,20 @@ import xarray as xr
 
 
 def hourly_to_daily_precip(da: xr.DataArray, time_dim: str = "time") -> xr.DataArray:
-    """Aggregate hourly precipitation to daily totals."""
-    da = da.assign_coords(
-        {time_dim: pd.to_datetime(da[time_dim].values)}
-    )
+    """Aggregate hourly precipitation to daily totals.
+
+    Works for both NumPy datetime64 and cftime time coordinates.
+    """
+    time_values = da[time_dim].values
+    try:
+        new_times = pd.to_datetime(time_values)
+    except (TypeError, ValueError):
+        # cftime objects are not convertible by pd.to_datetime directly;
+        # fall back to ISO-string conversion.
+        new_times = pd.to_datetime(
+            [t.strftime("%Y-%m-%dT%H:%M:%S") for t in time_values]
+        )
+    da = da.assign_coords({time_dim: new_times})
     return da.resample({time_dim: "1D"}).sum(dim=time_dim, skipna=False)
 
 
