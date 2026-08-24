@@ -123,6 +123,54 @@ TOOLS = [
 TOOL_REGISTRY: dict[str, Callable] = {fn.__name__: fn for fn in TOOLS}
 
 
+TOOL_RATIONALES: dict[str, str] = {
+    "compute_and_plot_extreme": (
+        "Calculates an ETCCDI extreme-precipitation index from daily data "
+        "and produces a spatial map."
+    ),
+    "regional_precip_trend": (
+        "Fits a linear trend to the 20-year Germany monthly record "
+        "to quantify long-term precipitation change."
+    ),
+    "germany_climatology_map": (
+        "Produces 20-year mean precipitation and CMIP6-minus-CPC "
+        "bias maps over Germany."
+    ),
+    "global_climatology_map": (
+        "Produces 2013 global mean precipitation and CMIP6-minus-CPC "
+        "bias world maps."
+    ),
+    "compare_precip_at_point": (
+        "Compares observed and modelled precipitation time series "
+        "at a single grid cell."
+    ),
+    "linear_regression_analysis": (
+        "Fits a linear trend with p-value and 95% confidence interval "
+        "to a precipitation time series."
+    ),
+    "spatial_pattern_correlation": (
+        "Computes area-weighted spatial-pattern correlation between "
+        "two gridded fields."
+    ),
+    "bias_metrics": (
+        "Computes RMSE, MAE, mean error and Pearson correlation "
+        "between a model and reference field."
+    ),
+    "fit_precip_distribution": (
+        "Fits a statistical distribution to a precipitation sample "
+        "for frequency analysis."
+    ),
+    "answer_climate_question": (
+        "Answers factual questions about datasets, ETCCDI indices, "
+        "and data limitations from the embedded knowledge base."
+    ),
+    "execute_xarray_script": (
+        "Sandboxed code-interpreter fallback for questions not covered "
+        "by the curated tools; not the primary scientific path."
+    ),
+}
+
+
 def _parse_param_docs(docstring: str, param_names: list[str]) -> dict[str, str]:
     """Extract one-line descriptions for each parameter from a NumPy-style docstring."""
     param_docs: dict[str, str] = {}
@@ -242,17 +290,39 @@ def _build_system_prompt() -> str:
     return (
         "You are an expert climate scientist and AI agent with diagnostic, "
         "statistical, metadata and code-interpreter tools. "
+        "You understand the user's question, select the appropriate deterministic "
+        "scientific tools, pass the correct parameters, and then interpret the "
+        "results the tools return. You must NOT perform the climate mathematics "
+        "yourself; all calculations and visualisations are done by the tools. "
         "You should be as flexible and helpful as possible: figure out which "
         "tool(s) to call, and with which arguments, purely from the user's question. "
         "The only hard limits are the spatial and temporal extent of the underlying "
         "data (described below). If a question naturally requires more than one "
         "step or figure, call the relevant tools in sequence rather than asking the "
         "user to narrow their request. "
-        "For factual questions about datasets, regions, ETCCDI indices or CMIP6, "
-        "call answer_climate_question first. If no existing tool covers the request, "
-        "use execute_xarray_script as a fallback. "
-        "After running tool(s), summarise the results in a few sentences, "
-        "mentioning every figure path produced."
+        "Only call answer_climate_question for purely conceptual or metadata "
+        "questions that do not require a figure, statistic, or comparison "
+        "(e.g. 'What is RX1day?', 'Which datasets are available?'). "
+        "Do NOT call answer_climate_question to obtain dataset file paths; every "
+        "diagnostic tool already knows the bundled demo datasets and accepts "
+        "parameters such as dataset='cpc', dataset='cmip6', dataset='both', or a "
+        "dataset_path for non-demo data. "
+        "If the user's request involves maps, trends, bias metrics, correlations, "
+        "distribution fits, or point comparisons, call the relevant diagnostic "
+        "tool directly. "
+        "If you have already generated maps with compute_and_plot_extreme, "
+        "global_climatology_map, or germany_climatology_map, interpret those "
+        "figures in your final summary. Do NOT call execute_xarray_script to "
+        "compute pixel-wise masks or comparisons unless the user explicitly asks "
+        "for a custom calculation not covered by the curated tools. "
+        "If a tool returns an error (a message starting with 'Error' or containing "
+        "'Forbidden'), do not fabricate scientific results. Report the error "
+        "clearly, mention any figures successfully generated earlier in the "
+        "conversation, and stop. "
+        "If no existing tool covers the request, use execute_xarray_script as a "
+        "fallback. "
+        "After running tool(s) successfully, summarise the results in a few "
+        "sentences, mentioning every figure path produced."
         "\n\nAvailable tools:\n"
         "- `compute_and_plot_extreme`: spatial extreme-index maps (RX1day, RX5day, R95p) "
         f"over an arbitrary bounding box, for a single year (2013). Datasets: {demo_hints}.\n"
@@ -295,7 +365,19 @@ def _build_system_prompt() -> str:
         "point comparisons). No NAO, ENSO, sea-level pressure or other "
         "teleconnection indices are available. If a question falls outside these "
         "limits, or asks about climate modes, call answer_climate_question to "
-        "explain the limitation rather than running a tool or inventing results."
+        "explain the limitation rather than running a tool or inventing results. "
+        "\nFor model-vs-observation evaluation, prefer `global_climatology_map` "
+        "or `germany_climatology_map` with dataset='both' for mean/bias maps, "
+        "`bias_metrics` for quantitative RMSE/MAE/correlation, and "
+        "`spatial_pattern_correlation` for pattern similarity. "
+        "\nScientific guardrail: all numerical diagnostics are produced by the "
+        "deterministic Python functions in the tools. Your role is to select "
+        "the right tool, pass valid parameters, and interpret the returned "
+        "results. Your interpretation is not independent scientific evidence. "
+        "Use cautious language such as 'The model shows...', 'The analysis "
+        "indicates...', or 'The calculated bias is...'. Do not make causal "
+        "attribution statements such as 'Climate change caused...' unless the "
+        "implemented analysis explicitly supports attribution."
     )
 
 
@@ -308,6 +390,20 @@ def _execute_tool(name: str, args: dict) -> str:
         return fn(**args)
     except Exception as exc:
         return f"Error executing {name}: {exc}"
+
+
+def _is_tool_failure(result: str) -> bool:
+    """Return True if a tool result indicates that the tool did not succeed."""
+    return result.startswith("Error") or "Error:" in result
+
+
+def _stop_summary(activity: list[dict]) -> dict:
+    """Return a result indicating the agent was stopped by the user."""
+    return {
+        "summary": "🛑 The agent was stopped by the user.",
+        "activity": activity
+        + [{"action": "Interpreting results", "detail": "Stopped by user request."}],
+    }
 
 
 def _execute_function_call(function_call) -> str:
@@ -325,7 +421,9 @@ def _execute_function_call(function_call) -> str:
     return _execute_tool(name, args)
 
 
-def _run_gemini_agent(user_query: str, api_key: str) -> str:
+def _run_gemini_agent(
+    user_query: str, api_key: str, should_stop: Callable[[], bool] | None = None
+) -> str:
     """Run the Google Gemini function-calling agent."""
     try:
         import google.generativeai as genai
@@ -343,6 +441,8 @@ def _run_gemini_agent(user_query: str, api_key: str) -> str:
     )
     system_prompt = _build_system_prompt()
 
+    activity = [{"action": "Understanding request", "detail": user_query}]
+
     chat = model.start_chat()
     response = chat.send_message(
         [system_prompt, user_query],
@@ -353,12 +453,38 @@ def _run_gemini_agent(user_query: str, api_key: str) -> str:
         },
     )
 
-    for _ in range(3):
+    tool_errors = []
+
+    for round_idx in range(3):
+        if should_stop and should_stop():
+            return _stop_summary(activity)
         round_results = []
         for candidate in response.candidates:
             for part in candidate.content.parts:
                 if hasattr(part, "function_call") and part.function_call:
-                    result = _execute_function_call(part.function_call)
+                    fc = part.function_call
+                    name = fc.name
+                    try:
+                        from google.protobuf.json_format import MessageToDict
+
+                        args = MessageToDict(fc.args)
+                    except Exception:
+                        args = dict(fc.args)
+                    activity.append({"action": "Selected diagnostic", "detail": name})
+                    activity.append({
+                        "action": "Reason",
+                        "detail": TOOL_RATIONALES.get(
+                            name, "Executing a deterministic climate-analysis function."
+                        ),
+                    })
+                    activity.append({
+                        "action": "Executing",
+                        "detail": f"{name} with parameters {json.dumps(args, indent=2, ensure_ascii=False)}",
+                    })
+                    result = _execute_tool(name, args)
+                    activity.append({"action": "Tool output", "detail": result[:300]})
+                    if _is_tool_failure(result):
+                        tool_errors.append(f"{name}: {result}")
                     round_results.append(result)
 
         if not round_results:
@@ -375,13 +501,35 @@ def _run_gemini_agent(user_query: str, api_key: str) -> str:
             "results produced so far, including every figure path."
         )
 
+    if tool_errors:
+        summary = (
+            "⚠️ The agent stopped because one or more tools returned an error. "
+            "No scientific interpretation can be produced.\n\n"
+            "Tool errors:\n- " + "\n- ".join(tool_errors)
+        )
+        activity.append({
+            "action": "Interpreting results",
+            "detail": "Stopped: tool error(s) prevent a reliable scientific answer.",
+        })
+        return {"summary": summary, "activity": activity}
+
     try:
-        return response.text
+        summary = response.text
     except Exception as exc:
-        return f"The Gemini agent encountered an error: {exc}"
+        summary = f"The Gemini agent encountered an error: {exc}"
+    activity.append({
+        "action": "Interpreting results",
+        "detail": "Synthesising tool outputs into a scientific answer.",
+    })
+    return {"summary": summary, "activity": activity}
 
 
-def _run_groq_agent(user_query: str, api_key: str, model: str = "openai/gpt-oss-20b") -> str:
+def _run_groq_agent(
+    user_query: str,
+    api_key: str,
+    model: str = "openai/gpt-oss-20b",
+    should_stop: Callable[[], bool] | None = None,
+) -> str:
     """Run the Groq (OpenAI-compatible) function-calling agent.
 
     Groq provides an OpenAI-compatible chat completions endpoint; we use the
@@ -405,9 +553,14 @@ def _run_groq_agent(user_query: str, api_key: str, model: str = "openai/gpt-oss-
         {"role": "system", "content": _build_system_prompt()},
         {"role": "user", "content": user_query},
     ]
+    activity = [{"action": "Understanding request", "detail": user_query}]
+
+    tool_errors = []
 
     try:
-        for _ in range(3):
+        for round_idx in range(3):
+            if should_stop and should_stop():
+                return _stop_summary(activity)
             response = client.chat.completions.create(
                 model=model,
                 messages=messages,
@@ -418,7 +571,12 @@ def _run_groq_agent(user_query: str, api_key: str, model: str = "openai/gpt-oss-
 
             message = response.choices[0].message
             if not message.tool_calls:
-                return message.content or "The agent did not return a summary."
+                summary = message.content or "The agent did not return a summary."
+                activity.append({
+                    "action": "Interpreting results",
+                    "detail": "Synthesising tool outputs into a scientific answer.",
+                })
+                return {"summary": summary, "activity": activity}
 
             # Build the assistant message manually because Groq's API rejects
             # extra fields (e.g. "annotations") that model_dump() may include.
@@ -440,16 +598,43 @@ def _run_groq_agent(user_query: str, api_key: str, model: str = "openai/gpt-oss-
             messages.append(assistant_msg)
 
             for tool_call in message.tool_calls:
+                name = tool_call.function.name
                 try:
                     args = json.loads(tool_call.function.arguments)
                 except json.JSONDecodeError:
                     args = {}
-                result = _execute_tool(tool_call.function.name, args)
+                activity.append({"action": "Selected diagnostic", "detail": name})
+                activity.append({
+                    "action": "Reason",
+                    "detail": TOOL_RATIONALES.get(
+                        name, "Executing a deterministic climate-analysis function."
+                    ),
+                })
+                activity.append({
+                    "action": "Executing",
+                    "detail": f"{name} with parameters {json.dumps(args, indent=2, ensure_ascii=False)}",
+                })
+                result = _execute_tool(name, args)
+                activity.append({"action": "Tool output", "detail": result[:300]})
+                if _is_tool_failure(result):
+                    tool_errors.append(f"{name}: {result}")
                 messages.append({
                     "role": "tool",
                     "tool_call_id": tool_call.id,
                     "content": result,
                 })
+
+        if tool_errors:
+            summary = (
+                "⚠️ The agent stopped because one or more tools returned an error. "
+                "No scientific interpretation can be produced.\n\n"
+                "Tool errors:\n- " + "\n- ".join(tool_errors)
+            )
+            activity.append({
+                "action": "Interpreting results",
+                "detail": "Stopped: tool error(s) prevent a reliable scientific answer.",
+            })
+            return {"summary": summary, "activity": activity}
 
         # Force a final text-only summary if the model keeps calling tools
         messages.append({
@@ -464,7 +649,12 @@ def _run_groq_agent(user_query: str, api_key: str, model: str = "openai/gpt-oss-
             tool_choice="none",
             temperature=0.2,
         )
-        return final.choices[0].message.content or "The agent did not return a final summary."
+        summary = final.choices[0].message.content or "The agent did not return a final summary."
+        activity.append({
+            "action": "Interpreting results",
+            "detail": "Synthesising tool outputs into a scientific answer.",
+        })
+        return {"summary": summary, "activity": activity}
     except BadRequestError as exc:
         # Some Groq models generate malformed tool-call JSON (e.g. long
         # multi-line scripts). Fall back to a plain text answer instead.
@@ -488,12 +678,35 @@ def _run_groq_agent(user_query: str, api_key: str, model: str = "openai/gpt-oss-
                     ],
                     temperature=0.2,
                 )
-                return fallback.choices[0].message.content or "The agent did not return a summary."
+                summary = fallback.choices[0].message.content or "The agent did not return a summary."
             except Exception as inner:
-                return f"The Groq agent encountered a tool-calling error and the fallback also failed: {inner}"
-        return f"The Groq agent encountered an error: {exc}"
+                summary = f"The Groq agent encountered a tool-calling error and the fallback also failed: {inner}"
+            activity.append({
+                "action": "Interpreting results",
+                "detail": "No tool could be executed; providing a direct answer.",
+            })
+            return {"summary": summary, "activity": activity}
+        activity.append({
+            "action": "Interpreting results",
+            "detail": "No tool could be executed; providing a direct answer.",
+        })
+        return {"summary": f"The Groq agent encountered an error: {exc}", "activity": activity}
     except Exception as exc:
-        return f"The Groq agent encountered an error: {exc}"
+        activity.append({
+            "action": "Interpreting results",
+            "detail": "No tool could be executed; providing a direct answer.",
+        })
+        return {"summary": f"The Groq agent encountered an error: {exc}", "activity": activity}
+
+
+def _format_agent_result(output: dict) -> str:
+    """Render a structured agent output as markdown for backwards compatibility."""
+    lines = ["### Agent activity"]
+    for step in output.get("activity", []):
+        lines.append(f"- **{step['action']}**: {step['detail']}")
+    lines.append("\n### Scientific answer")
+    lines.append(output.get("summary", ""))
+    return "\n".join(lines)
 
 
 def run_climate_agent(
@@ -501,7 +714,9 @@ def run_climate_agent(
     api_key: str | None = None,
     provider: str = "gemini",
     groq_model: str = "openai/gpt-oss-20b",
-) -> str:
+    return_structured: bool = False,
+    should_stop: Callable[[], bool] | None = None,
+) -> str | dict:
     """Run the climate ReAct agent against the user query.
 
     Parameters
@@ -515,27 +730,49 @@ def run_climate_agent(
         LLM provider to use: "gemini" or "groq".
     groq_model
         Model name to use when provider="groq".
+    return_structured
+        If True, returns a dict with 'summary' and 'activity' keys.
+        If False, returns a markdown string for backwards compatibility.
 
     Returns
     -------
-    str
-        Final agent response, including the path(s) to any generated figure(s).
+    str | dict
+        Final agent response (markdown string or structured dict).
     """
     provider = provider.lower().strip()
     if provider not in ("gemini", "groq"):
-        return f"Unsupported provider '{provider}'. Choose 'gemini' or 'groq'."
+        output = {
+            "summary": f"Unsupported provider '{provider}'. Choose 'gemini' or 'groq'.",
+            "activity": [{"action": "Error", "detail": f"Unsupported provider '{provider}'"}],
+        }
+        if return_structured:
+            return output
+        return _format_agent_result(output)
 
     if api_key is None:
         api_key = _get_api_key(provider)
     if not api_key:
-        return (
-            f"No {provider.upper()} API key found. Set {provider.upper()}_API_KEY "
-            "in your environment or add it to .streamlit/secrets.toml to run the agent."
-        )
+        output = {
+            "summary": (
+                f"No {provider.upper()} API key found. Set {provider.upper()}_API_KEY "
+                "in your environment or add it to .streamlit/secrets.toml to run the agent."
+            ),
+            "activity": [{"action": "Error", "detail": f"No {provider.upper()} API key found"}],
+        }
+        if return_structured:
+            return output
+        return _format_agent_result(output)
 
     if provider == "gemini":
-        return _run_gemini_agent(user_query, api_key)
-    return _run_groq_agent(user_query, api_key, model=groq_model)
+        output = _run_gemini_agent(user_query, api_key, should_stop=should_stop)
+    else:
+        output = _run_groq_agent(
+            user_query, api_key, model=groq_model, should_stop=should_stop
+        )
+
+    if return_structured:
+        return output
+    return _format_agent_result(output)
 
 
 class ClimateDiagnosticAgent:

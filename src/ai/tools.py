@@ -122,20 +122,40 @@ def calculate_r95p(da: xr.DataArray) -> xr.DataArray:
     return r95p(da)
 
 
+def _dataset_label(path: Path) -> str:
+    """Return a short human-readable dataset name from a NetCDF path."""
+    name = path.name.lower()
+    if "cmip6" in name:
+        return "CMIP6 MPI-ESM1-2-HR"
+    if "cpc" in name:
+        return "CPC (obs)"
+    if "gpm" in name:
+        return "GPM"
+    return "observation/model"
+
+
 def compute_and_plot_extreme(
     dataset_path: str,
     index_name: str,
     region_bbox: list[float],
     output_dir: str | None = None,
+    region_name: str | None = None,
 ) -> str:
-    """Load a NetCDF dataset, compute a precipitation extreme index over a region, and save a map.
+    """Load a daily NetCDF precipitation dataset, compute an ETCCDI extreme-precipitation index, save a map in mm, and return the figure path.
+
+    This tool is intended for short-duration extreme-event analysis from daily
+    data. All computations are performed by the deterministic Python function;
+    the LLM only selects the index and region.
 
     Parameters
     ----------
     dataset_path
-        Absolute or relative path to the NetCDF file containing daily precipitation.
+        Absolute or relative path to the NetCDF file containing daily
+        precipitation (mm/day).
     index_name
-        One of "RX1day", "RX5day", or "R95p".
+        One of "RX1day" (annual maximum 1-day total), "RX5day" (annual
+        maximum 5-day total), or "R95p" (sum of wet-day amounts above the 95th
+        percentile).
     region_bbox
         Bounding box as [min_lon, max_lon, min_lat, max_lat].
     output_dir
@@ -189,12 +209,18 @@ def compute_and_plot_extreme(
         if not out_dir.is_absolute():
             out_dir = BASE_DIR / out_dir
     out_dir.mkdir(parents=True, exist_ok=True)
-    out_path = out_dir / f"agent_{index_name}_output.png"
+    region_slug = region_name.lower().replace(" ", "_") if region_name else "region"
+    out_path = out_dir / f"agent_{index_name}_{region_slug}_output.png"
 
+    title_region = region_name or f"region {region_bbox}"
+    dataset_label = _dataset_label(path)
     fig = plot_map(
         result,
-        title=f"{index_name} over region {region_bbox}",
+        title=f"{index_name} over {title_region} ({dataset_label})",
         cbar_label="mm",
+        labelsize=16,
+        titlesize=18,
+        cbar_labelsize=16,
     )
     save_figure(
         fig,
@@ -205,6 +231,7 @@ def compute_and_plot_extreme(
             "units": "mm",
             "dataset": str(path),
             "region_bbox": region_bbox,
+            "region": region_name or "selected region",
             "diagnostic": f"{index_name} over selected region",
         },
     )
@@ -217,7 +244,7 @@ def regional_precip_trend(
     aggregation: str = "annual",
     output_dir: str | None = None,
 ) -> str:
-    """Compute and plot a 20-year (1995-2014) precipitation trend for Germany.
+    """Compute and plot the 20-year (1995-2014) area-mean precipitation trend for Germany, in mm/day per year.
 
     Uses the pre-downloaded, Germany-only, spatially-averaged daily
     precipitation time series (CPC reference and/or CMIP6 MPI-ESM1-2-HR
@@ -330,13 +357,13 @@ def germany_climatology_map(
     dataset: str = "both",
     output_dir: str | None = None,
 ) -> str:
-    """Plot a spatial precipitation climatology or bias map over Germany.
+    """Plot the 20-year (1995-2014) mean precipitation climatology or CMIP6-minus-CPC bias over Germany, in mm/day, and save the figure.
 
-    Uses the 20-year (1995-2014) monthly gridded fields. When
-    `dataset="both"`, a single 3-panel figure is produced: CPC mean,
+    When `dataset="both"`, a single 3-panel figure is produced: CPC mean,
     CMIP6 mean, and CMIP6-minus-CPC bias. With `dataset="cpc"` or
     `"cmip6"`, a single time-mean map is produced. `metric="bias"` always
-    produces a single bias map.
+    produces a single bias map. Intended for model-evaluation questions
+    comparing the CMIP6 MPI-ESM1-2-HR simulation against CPC observations.
     """
     metric = metric.lower().strip()
     dataset = dataset.lower().strip()
@@ -373,6 +400,10 @@ def germany_climatology_map(
             region="Germany",
             period="1995-2014",
             cbar_label="mm/day",
+            vmin=0,
+            vmax=4,
+            bias_vmin=-0.5,
+            bias_vmax=3,
         )
         save_figure(
             fig,
@@ -400,6 +431,8 @@ def germany_climatology_map(
             clim,
             title=f"Germany mean precipitation ({key.upper()}, 1995-2014)",
             cbar_label="mm/day",
+            vmin=0,
+            vmax=4,
         )
         save_figure(
             fig,
@@ -423,6 +456,8 @@ def germany_climatology_map(
         bias,
         title="Germany mean precipitation bias: CMIP6 MPI-ESM1-2-HR minus CPC (1995-2014)",
         cbar_label="mm/day",
+        vmin=-0.5,
+        vmax=3,
     )
     save_figure(
         fig,
@@ -445,14 +480,14 @@ def global_climatology_map(
     dataset: str = "both",
     output_dir: str | None = None,
 ) -> str:
-    """Plot a global precipitation climatology map or bias map.
+    """Plot the 2013 global mean precipitation climatology or CMIP6-minus-CPC bias, in mm/day, on a PlateCarree projection, and save the figure.
 
     Uses the 2013 monthly global fields (CPC regridded to the CMIP6 grid and
-    CMIP6 MPI-ESM1-2-HR). World maps are drawn in Robinson projection. When
-    `dataset="both"`, a single 3-panel figure is produced: CPC mean,
-    CMIP6 mean, and CMIP6-minus-CPC bias. With `dataset="cpc"` or
-    `"cmip6"`, a single time-mean map is produced. `metric="bias"` always
-    produces a single global bias map.
+    CMIP6 MPI-ESM1-2-HR). When `dataset="both"`, a single 3-panel figure is
+    produced: CPC mean, CMIP6 mean, and CMIP6-minus-CPC bias. With
+    `dataset="cpc"` or `"cmip6"`, a single time-mean map is produced.
+    `metric="bias"` always produces a single global bias map. Intended for
+    large-scale model-evaluation questions.
     """
     metric = metric.lower().strip()
     dataset = dataset.lower().strip()
@@ -497,6 +532,10 @@ def global_climatology_map(
             region="Global",
             period="2013",
             cbar_label="mm/day",
+            vmin=0,
+            vmax=14,
+            bias_vmin=-12,
+            bias_vmax=12,
         )
         save_figure(
             fig,
@@ -523,6 +562,8 @@ def global_climatology_map(
             clim,
             title=f"Global mean precipitation ({key.upper()}, 2013)",
             cbar_label="mm/day",
+            vmin=0,
+            vmax=14,
         )
         save_figure(
             fig,
@@ -545,6 +586,8 @@ def global_climatology_map(
         bias,
         title="Global mean precipitation bias: CMIP6 MPI-ESM1-2-HR minus CPC (2013)",
         cbar_label="mm/day",
+        vmin=-12,
+        vmax=12,
     )
     save_figure(
         fig,
@@ -569,7 +612,7 @@ def compare_precip_at_point(
     location_name: str | None = None,
     output_dir: str | None = None,
 ) -> str:
-    """Compare observed vs. simulated precipitation at a specific point (e.g. a city).
+    """Compare observed (CPC) and simulated (CMIP6) monthly precipitation at a point in Germany (1995-2014), in mm/day, and save the figure.
 
     Selects the nearest grid cell to the given latitude/longitude from the
     20-year (1995-2014) monthly gridded Germany fields and plots the

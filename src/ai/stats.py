@@ -145,7 +145,7 @@ def linear_regression_analysis(
     aggregation: str = "annual",
     output_dir: str | None = None,
 ) -> str:
-    """Fit a linear trend to a precipitation time series and report statistics.
+    """Fit a linear trend to a precipitation time series, report the slope (per year), R², p-value and 95% CI, and save the figure.
 
     Computes the slope, intercept, R², p-value and 95% confidence interval.
     The series can be a spatial mean over a region, or a single grid cell.
@@ -162,8 +162,9 @@ def linear_regression_analysis(
         [lat, lon] to select a single grid cell. Overrides region_bbox if both
         are provided.
     aggregation
-        Temporal aggregation of the input before fitting: "annual", "monthly",
-        "daily", or "mean" (collapses time entirely).
+        Temporal aggregation of the input before fitting: "annual",
+        "monthly", "daily", or "mean" (collapses time entirely). Slope is
+        reported in the variable's native units per year (e.g. mm/day/year).
     output_dir
         Optional directory to save a time-series + trend figure.
 
@@ -283,7 +284,7 @@ def spatial_pattern_correlation(
     weight_by_lat: bool = True,
     time_index: int | None = None,
 ) -> str:
-    """Compute Pearson and area-weighted pattern correlation between two fields.
+    """Compute Pearson and area-weighted pattern correlation between two gridded fields for model-vs-observation evaluation.
 
     Parameters
     ----------
@@ -374,7 +375,7 @@ def bias_metrics(
     region_bbox: list[float] | None = None,
     output_dir: str | None = None,
 ) -> str:
-    """Compute RMSE, MAE, mean error and other bias metrics between two fields.
+    """Compute RMSE, MAE, mean error and Pearson correlation between a model and reference field for model-vs-observation evaluation, optionally save a difference map.
 
     Parameters
     ----------
@@ -473,7 +474,7 @@ def fit_precip_distribution(
     distribution: str = "gamma",
     output_dir: str | None = None,
 ) -> str:
-    """Fit a statistical distribution to a precipitation sample.
+    """Fit a statistical distribution to a precipitation sample, report parameters, KS p-value, AIC/BIC and save a histogram/PDF figure.
 
     Parameters
     ----------
