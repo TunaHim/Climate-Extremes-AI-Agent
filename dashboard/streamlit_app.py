@@ -4,6 +4,7 @@
 import json
 import re
 import sys
+import threading
 import time
 from pathlib import Path
 
@@ -29,10 +30,10 @@ DATA_DIR = BASE_DIR / "data"
 DEMO_FIGURES = sorted(DEMO_FIGURES_DIR.glob("*.png")) if DEMO_FIGURES_DIR.exists() else []
 
 INTRO_TEXT = """
-This prototype explores precipitation extremes and biases in the **Destination Earth Climate DT**
-using a small, curated demo. It compares CMIP6 historical output from **MPI-ESM1-2-HR** against
-gauge-based **CPC** observations. Use this page for a quick orientation, then switch to the
-**Agentic Demo** tab to ask your own climate-science questions in plain language.
+This prototype explores precipitation extremes and biases using a small, curated demo.
+It compares CMIP6 historical output from **MPI-ESM1-2-HR** against gauge-based **CPC**
+observations. Use this page for a quick orientation, then switch to the **Agentic Demo** tab
+to ask your own climate-science questions in plain language.
 """
 
 METHODLOGY_TEXT = """
@@ -51,6 +52,11 @@ METHODLOGY_TEXT = """
 **Limitations**
 Only Germany has a multi-year (1995–2014) monthly record. All other regions are limited to 2013,
 so multi-decadal trend and climatology questions are only reliable for Germany.
+
+**AI role**
+All numerical climate diagnostics are produced by deterministic Python/xarray functions.
+The LLM selects tools, passes parameters and interprets the returned results.
+Interpretation is not independent scientific evidence and should not be treated as attribution.
 """
 
 EXAMPLE_QUESTIONS = [
@@ -58,11 +64,21 @@ EXAMPLE_QUESTIONS = [
     "Compute and compare CPC and CMIP6 20-year mean precipitation over Germany.",
     "Compare observed and modelled precipitation at Frankfurt, Hamburg and Munich from 1995 to 2014.",
     "Is there a significant precipitation trend in Germany between 1995 and 2014, comparing CPC to CMIP6?",
+    "Map CPC RX1day and RX5day over South Asia for 2013 and explain the differences.",
+    "What is the spatial pattern correlation between CMIP6 and CPC global precipitation in 2013?",
+    "Show the CMIP6 minus CPC bias map for mean precipitation over Europe in 2013.",
+    "For Germany 1995–2014, is the CPC precipitation trend statistically different from the CMIP6 trend?",
 ]
+
+RX1DAY_DEFINITION = """
+**RX1day over selected region** — annual maximum 1-day precipitation amount recorded in each grid cell.
+- **Variable:** precipitation
+- **Index:** RX1day
+- **Units:** mm
+"""
 
 AI_MODELS = [
     "Gemini 2.5 Flash",
-    "Groq Llama 3.2 Vision",
     "Ministral 3 (Local Ollama)",
     "Gemma 4 Vision (Local Ollama)",
     "Qwen 2.5-VL (Local Ollama)",
@@ -92,6 +108,15 @@ def _load_metadata(image_path: Path) -> dict:
         except Exception:
             pass
     return {}
+
+
+def _render_analysis_info(fig_path: Path):
+    """Show the structured provenance metadata associated with a figure."""
+    metadata = _load_metadata(fig_path)
+    if not metadata:
+        return
+    with st.expander("📋 Analysis information"):
+        st.json(metadata, expanded=False)
 
 
 def _figure_description(metadata: dict, stem: str) -> str:
@@ -151,16 +176,18 @@ def _precompute_overview_figures() -> list[Path]:
     if p:
         paths.append(p)
 
-    # Regional extreme example: RX1day over Europe
-    europe = DEMO_REGIONS["europe"]
-    msg = compute_and_plot_extreme(
-        dataset_path=str(europe["path"]),
-        index_name="RX1day",
-        region_bbox=europe["bbox"],
-    )
-    p = _extract_path_from_message(msg)
-    if p:
-        paths.append(p)
+    # Regional extreme example: RX1day over Europe and South Asia
+    for region_name in ["Europe", "South Asia"]:
+        region = DEMO_REGIONS[region_name.lower().replace(" ", "_")]
+        msg = compute_and_plot_extreme(
+            dataset_path=str(region["path"]),
+            index_name="RX1day",
+            region_bbox=region["bbox"],
+            region_name=region_name,
+        )
+        p = _extract_path_from_message(msg)
+        if p:
+            paths.append(p)
 
     return paths
 
@@ -169,59 +196,66 @@ def _data_availability_table() -> pd.DataFrame:
     """Build the table describing every dataset bundled in data/demo/."""
     rows = [
         {
-            "File": "cpc_south_asia_2013.nc",
-            "Dataset": "CPC (observed)",
-            "Region": "South Asia",
-            "Years": "2013 (1 yr)",
-            "Temporal res.": "Daily",
+            "Region": "Germany — CPC (obs)",
+            "Years": "1995-2014 (20 yr)",
+            "Temporal res.": "Monthly (gridded)",
             "Spatial res.": "~0.5°",
-            "Best for": "Extreme index maps (RX1day, RX5day, R95p)",
+            "Best for": "20-yr trend, climatology & bias maps",
+            "File": "cpc_germany_1995_2014_monthly.nc",
         },
         {
-            "File": "cpc_europe_2013.nc",
-            "Dataset": "CPC (observed)",
-            "Region": "Europe",
-            "Years": "2013 (1 yr)",
-            "Temporal res.": "Daily",
-            "Spatial res.": "~0.5°",
-            "Best for": "Extreme index maps (RX1day, RX5day, R95p)",
-        },
-        {
-            "File": "cmip6_global_monthly_2013.nc",
-            "Dataset": "CMIP6 MPI-ESM1-2-HR (model)",
-            "Region": "Global",
-            "Years": "2013 (1 yr)",
-            "Temporal res.": "Monthly",
+            "Region": "Germany — CMIP6 MPI-ESM1-2-HR",
+            "Years": "1995-2014 (20 yr)",
+            "Temporal res.": "Monthly (gridded)",
             "Spatial res.": "~100 km",
-            "Best for": "Global mean precipitation maps",
+            "Best for": "20-yr trend, climatology & bias maps",
+            "File": "cmip6_germany_1995_2014_monthly.nc",
         },
         {
-            "File": "cpc_global_monthly_2013_regridded.nc",
-            "Dataset": "CPC (observed, regridded)",
-            "Region": "Global",
+            "Region": "Global — CPC (obs, regridded)",
             "Years": "2013 (1 yr)",
             "Temporal res.": "Monthly",
             "Spatial res.": "~100 km (regridded to CMIP6 grid)",
             "Best for": "Model-vs-reference bias maps",
+            "File": "cpc_global_monthly_2013_regridded.nc",
         },
         {
-            "File": "cpc_germany_1995_2014_monthly.nc",
-            "Dataset": "CPC (observed)",
-            "Region": "Germany",
-            "Years": "1995-2014 (20 yr)",
-            "Temporal res.": "Monthly (gridded)",
-            "Spatial res.": "~0.5°",
-            "Best for": "20-yr trend, climatology & bias maps",
-        },
-        {
-            "File": "cmip6_germany_1995_2014_monthly.nc",
-            "Dataset": "CMIP6 MPI-ESM1-2-HR (model)",
-            "Region": "Germany",
-            "Years": "1995-2014 (20 yr)",
-            "Temporal res.": "Monthly (gridded)",
+            "Region": "Global — CMIP6 MPI-ESM1-2-HR",
+            "Years": "2013 (1 yr)",
+            "Temporal res.": "Monthly",
             "Spatial res.": "~100 km",
-            "Best for": "20-yr trend, climatology & bias maps",
+            "Best for": "Global mean precipitation maps",
+            "File": "cmip6_global_monthly_2013.nc",
         },
+        {
+            "Region": "South Asia — CPC (obs)",
+            "Years": "2013 (1 yr)",
+            "Temporal res.": "Daily",
+            "Spatial res.": "~0.5°",
+            "Best for": "Extreme index maps (RX1day, RX5day, R95p)",
+            "File": "cpc_south_asia_2013.nc",
+        },
+        {
+            "Region": "Europe — CPC (obs)",
+            "Years": "2013 (1 yr)",
+            "Temporal res.": "Daily",
+            "Spatial res.": "~0.5°",
+            "Best for": "Extreme index maps (RX1day, RX5day, R95p)",
+            "File": "cpc_europe_2013.nc",
+        },
+    ]
+    return pd.DataFrame(rows)
+
+
+def _right_panel_data_table() -> pd.DataFrame:
+    """Compact two-column data availability summary for the agent tab."""
+    rows = [
+        {"Region / Dataset": "Germany — CPC (obs)", "Coverage": "1995–2014 (20 yr) — Monthly"},
+        {"Region / Dataset": "Germany — CMIP6 MPI-ESM1-2-HR", "Coverage": "1995–2014 (20 yr) — Monthly"},
+        {"Region / Dataset": "Global — CPC (obs, regridded)", "Coverage": "2013 (1 yr) — Monthly"},
+        {"Region / Dataset": "Global — CMIP6 MPI-ESM1-2-HR", "Coverage": "2013 (1 yr) — Monthly"},
+        {"Region / Dataset": "South Asia — CPC (obs)", "Coverage": "2013 (1 yr) — Daily"},
+        {"Region / Dataset": "Europe — CPC (obs)", "Coverage": "2013 (1 yr) — Daily"},
     ]
     return pd.DataFrame(rows)
 
@@ -274,7 +308,11 @@ def render_general_analysis():
         st.warning("No overview figures could be generated. Check that data/demo/ is populated.")
         return
 
-    for fig_path in overview_paths:
+    clim_paths = overview_paths[:2]
+    rx1day_paths = overview_paths[2:]
+
+    # Climatology figures (global and Germany 3-panel maps)
+    for fig_path in clim_paths:
         if not fig_path.exists():
             continue
         metadata = _load_metadata(fig_path)
@@ -282,8 +320,23 @@ def render_general_analysis():
         st.markdown(f"### {title}")
         st.image(str(fig_path), use_container_width=True)
         st.markdown(_figure_description(metadata, fig_path.stem))
+        _render_analysis_info(fig_path)
         render_figure_interpretation(fig_path)
         st.markdown("---")
+
+    # RX1day over Europe and South Asia, shown side by side
+    st.markdown("### RX1day over selected region")
+    cols = st.columns(2)
+    for i, fig_path in enumerate(rx1day_paths):
+        if not fig_path.exists():
+            continue
+        metadata = _load_metadata(fig_path)
+        region = metadata.get("region", "selected region")
+        with cols[i]:
+            st.image(str(fig_path), use_container_width=True)
+            st.caption(f"RX1day — {region}")
+    st.markdown(RX1DAY_DEFINITION)
+    st.markdown("---")
 
 
 def _render_figure_grid(figure_paths: list[Path]):
@@ -296,6 +349,7 @@ def _render_figure_grid(figure_paths: list[Path]):
             metadata = _load_metadata(fig_path)
             caption = metadata.get("diagnostic", fig_path.stem)
             st.image(str(fig_path), caption=caption, use_container_width=True)
+            _render_analysis_info(fig_path)
 
             trend = metadata.get("trend_mm_per_day_per_year")
             if trend:
@@ -312,106 +366,235 @@ def _render_figure_grid(figure_paths: list[Path]):
             )
 
 
-def render_agentic_demo():
-    """Live multi-provider function-calling agent that executes climate tools."""
-    st.header("🧠 Agentic Diagnostic Execution")
-    st.markdown(
-        "Ask any climate-science question in plain language. The agent decides "
-        "which diagnostic(s) to run and how many figures to produce. The only real "
-        "limits are the spatial and temporal extent of the underlying data."
+def _render_chat_figures(figure_paths: list[Path]):
+    """Render agent-generated figures inside a chat message."""
+    for i, fig_path in enumerate(figure_paths):
+        if not fig_path.exists():
+            continue
+        metadata = _load_metadata(fig_path)
+        caption = metadata.get("diagnostic", fig_path.stem.replace("_", " ").title())
+        st.image(str(fig_path), caption=caption, use_container_width=True)
+        _render_analysis_info(fig_path)
+
+        trend = metadata.get("trend_mm_per_day_per_year")
+        if trend:
+            dataset_labels = {"cpc": "CPC (observed)", "cmip6": "CMIP6 (model)"}
+            for key, slope in trend.items():
+                st.metric(f"Trend — {dataset_labels.get(key, key)}", f"{slope:+.4f} mm/day/yr")
+
+        st.download_button(
+            "⬇️ Download PNG",
+            data=fig_path.read_bytes(),
+            file_name=fig_path.name,
+            mime="image/png",
+            key=f"chat_dl_{fig_path.name}_{i}",
+        )
+
+
+class AgentTask:
+    """Run run_climate_agent in a background thread so the UI can show a stop button."""
+
+    def __init__(self, question: str, provider: str, groq_model: str | None):
+        self.question = question
+        self.provider = provider
+        self.groq_model = groq_model
+        self.stop_event = threading.Event()
+        self.result: dict | None = None
+        self.error: Exception | None = None
+        self._thread = threading.Thread(target=self._target, daemon=True)
+
+    def _target(self) -> None:
+        try:
+            self.result = run_climate_agent(
+                self.question,
+                provider=self.provider,
+                return_structured=True,
+                should_stop=self.stop_event.is_set,
+                groq_model=self.groq_model,
+            )
+        except Exception as exc:
+            self.error = exc
+
+    def start(self) -> None:
+        self._thread.start()
+
+    @property
+    def is_alive(self) -> bool:
+        return self._thread.is_alive()
+
+
+def _finalize_agent_task(run_start: float) -> None:
+    """Collect a finished AgentTask from session state and append its result to history."""
+    task = st.session_state.get("agent_task")
+    if task is None:
+        return
+    st.session_state["agent_task"] = None
+
+    if task.error:
+        summary = f"Agent failed: {task.error}"
+        activity = []
+    else:
+        summary = (task.result or {}).get("summary", "")
+        activity = (task.result or {}).get("activity", [])
+
+    agent_figures = sorted(
+        (p for p in FIGURES_DIR.glob("agent_*_output.png") if p.stat().st_mtime >= run_start),
+        key=lambda p: p.stat().st_mtime,
     )
 
-    if "agent_question" not in st.session_state:
-        st.session_state["agent_question"] = EXAMPLE_QUESTIONS[0]
+    st.session_state["agent_history"].append(
+        {
+            "question": task.question,
+            "provider": task.provider,
+            "summary": summary,
+            "activity": activity,
+            "figures": [str(p) for p in agent_figures],
+        }
+    )
+
+
+def render_agentic_demo():
+    """Live multi-provider function-calling agent in a VS Code-style chat layout."""
+    st.header("🧠 Agentic Diagnostic Execution")
+    st.caption(
+        "All numerical diagnostics are computed by deterministic Python/xarray functions. "
+        "The LLM selects tools and interprets the returned results; interpretation is not "
+        "independent scientific evidence."
+    )
+
     if "agent_history" not in st.session_state:
         st.session_state["agent_history"] = []
+    if "pending_query" not in st.session_state:
+        st.session_state["pending_query"] = ""
+    if "agent_task" not in st.session_state:
+        st.session_state["agent_task"] = None
+    if "agent_task_start" not in st.session_state:
+        st.session_state["agent_task_start"] = 0.0
+    if "agent_question" not in st.session_state:
+        st.session_state["agent_question"] = ""
+    if "clear_input" not in st.session_state:
+        st.session_state["clear_input"] = False
 
-    st.markdown("**Try an example, or write your own question below:**")
-    example_cols = st.columns(len(EXAMPLE_QUESTIONS))
-    for col, example in zip(example_cols, EXAMPLE_QUESTIONS):
-        if col.button(example, use_container_width=True):
-            st.session_state["agent_question"] = example
+    # Clear the text input from a previous Send click before the widget is rendered
+    if st.session_state.get("clear_input"):
+        st.session_state["agent_question"] = ""
+        st.session_state["clear_input"] = False
 
-    question = st.text_area(
-        "Your question",
-        key="agent_question",
-        height=80,
-    )
-
-    st.markdown("**Choose the provider and run it:**")
-    tab_gemini, tab_groq = st.tabs(["🚀 Gemini", "⚡ Groq"])
-
-    def _run_agent(provider: str, button_key: str, groq_model: str | None = None) -> None:
-        if st.button(f"Run Agent with {provider.title()}", type="primary", key=button_key):
-            run_start = time.time()
-            with st.spinner(f"Running {provider.title()} agent ..."):
-                try:
-                    kwargs = {}
-                    if groq_model:
-                        kwargs["groq_model"] = groq_model
-                    result = run_climate_agent(question, provider=provider, **kwargs)
-                except Exception as exc:
-                    st.error(f"Agent failed: {exc}")
-                    return
-
-            agent_figures = sorted(
-                (p for p in FIGURES_DIR.glob("agent_*_output.png") if p.stat().st_mtime >= run_start),
-                key=lambda p: p.stat().st_mtime,
-            )
-
-            st.session_state["agent_history"].insert(
-                0,
-                {
-                    "question": question,
-                    "provider": provider,
-                    "result": result,
-                    "figures": [str(p) for p in agent_figures],
-                },
-            )
-
-    with tab_gemini:
-        _run_agent("gemini", button_key="run_agent_gemini")
-
-    with tab_groq:
-        st.markdown("Groq model")
-        groq_model = st.selectbox(
-            "Select a model",
-            GROQ_MODELS,
-            index=0,
-            label_visibility="collapsed",
-            key="groq_model",
+    # Provider / model selector at the top
+    provider_col, model_col = st.columns([1, 2])
+    with provider_col:
+        provider = st.radio(
+            "Provider",
+            ["Gemini", "Groq"],
+            horizontal=True,
+            key="agent_provider",
         )
-        st.caption(
-            "Only these models have tool-calling support on this Groq account. "
-            "If one fails, try another."
-        )
-        _run_agent("groq", button_key="run_agent_groq", groq_model=groq_model)
-
-    # Render the most recent run prominently, older runs in a history panel below
-    history = st.session_state["agent_history"]
-    if history:
-        latest_run = history[0]
-        st.subheader("Agent result")
-        st.caption(f"Provider: {latest_run.get('provider', 'gemini').title()}")
-        st.markdown(latest_run["result"])
-
-        figure_paths = [Path(p) for p in latest_run["figures"] if Path(p).exists()]
-        if figure_paths:
-            st.subheader(f"Generated figure{'s' if len(figure_paths) > 1 else ''}")
-            _render_figure_grid(figure_paths)
+    with model_col:
+        groq_model = None
+        if provider == "Groq":
+            groq_model = st.selectbox(
+                "Groq model",
+                GROQ_MODELS,
+                index=0,
+                label_visibility="collapsed",
+                key="agent_groq_model",
+            )
         else:
-            st.info("No agent figure was generated.")
+            st.caption("Gemini Flash (latest)")
 
-    if len(history) > 1:
-        with st.expander(f"🕘 Run history ({len(history) - 1} earlier run(s))"):
-            for i, run in enumerate(history[1:], start=1):
-                st.markdown(f"**Q{i}: {run['question']}**")
-                st.caption(f"Provider: {run.get('provider', 'gemini').title()}")
-                st.markdown(run["result"])
-                figure_paths = [Path(p) for p in run["figures"] if Path(p).exists()]
+    st.markdown("---")
+
+    # Start a pending query in a background thread
+    pending_query = st.session_state.get("pending_query", "")
+    active_task = st.session_state.get("agent_task")
+    if pending_query and not (active_task and active_task.is_alive):
+        st.session_state["pending_query"] = ""
+        task = AgentTask(pending_query, provider.lower(), groq_model)
+        st.session_state["agent_task"] = task
+        st.session_state["agent_task_start"] = time.time()
+        task.start()
+        st.rerun()
+
+    col_main, col_side = st.columns([3, 1])
+
+    with col_side:
+        st.subheader("📋 Data availability")
+        st.markdown("Only Germany has a multi-year record.")
+        st.dataframe(
+            _right_panel_data_table(),
+            use_container_width=True,
+            hide_index=True,
+        )
+
+        st.markdown("---")
+        st.markdown("**Try an example:**")
+        for i, example in enumerate(EXAMPLE_QUESTIONS):
+            if st.button(
+                example,
+                use_container_width=True,
+                key=f"agent_example_{i}",
+            ):
+                st.session_state["agent_question"] = example
+                st.rerun()
+
+    with col_main:
+        # Conversation history
+        for run in st.session_state["agent_history"]:
+            with st.chat_message("user"):
+                st.markdown(run["question"])
+            with st.chat_message("assistant"):
+                st.markdown(run.get("summary", ""))
+                if run.get("activity"):
+                    with st.expander("Agent activity"):
+                        for step in run["activity"]:
+                            st.markdown(f"- **{step['action']}**: {step['detail']}")
+                figure_paths = [Path(p) for p in run.get("figures", []) if Path(p).exists()]
                 if figure_paths:
-                    _render_figure_grid(figure_paths)
-                st.markdown("---")
+                    _render_chat_figures(figure_paths)
+
+        # Chat input + Send/Stop at the bottom of the main conversation column
+        input_col, action_col = st.columns([3, 1])
+        with input_col:
+            st.text_area(
+                "Your question",
+                key="agent_question",
+                height=80,
+                placeholder="Ask a climate-science question...",
+                label_visibility="collapsed",
+            )
+        with action_col:
+            send_clicked = st.button(
+                "Send",
+                type="primary",
+                use_container_width=True,
+                key="agent_send",
+            )
+            task = st.session_state.get("agent_task")
+            if task and task.is_alive:
+                if st.button(
+                    "⏹ Stop",
+                    use_container_width=True,
+                    key="agent_stop",
+                ):
+                    task.stop_event.set()
+                    st.rerun()
+                st.info(f"Running {task.provider.title()} agent ...")
+
+        if send_clicked:
+            query = st.session_state.get("agent_question", "").strip()
+            if query:
+                st.session_state["pending_query"] = query
+                st.session_state["clear_input"] = True
+                st.rerun()
+
+    # Poll while the agent task is running, and finalize it when it finishes
+    task = st.session_state.get("agent_task")
+    if task and task.is_alive:
+        time.sleep(0.5)
+        st.rerun()
+    elif task is not None and not task.is_alive:
+        _finalize_agent_task(st.session_state.get("agent_task_start", time.time()))
+        st.rerun()
 
 
 def main():
