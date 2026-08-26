@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Streamlit dashboard for precipitation extremes analysis."""
+"""Streamlit dashboard for Climate DT precipitation extremes analysis."""
 
 import json
 import re
