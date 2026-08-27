@@ -4,6 +4,10 @@ Live demo: https://climate-extremes-ai-agent.streamlit.app/
 
 An agentic AI prototype for reproducible, interactive analysis of precipitation extremes and climate model evaluation. The dashboard puts an agentic AI layer in front of deterministic climate diagnostics: ask a question in plain language and a multi-provider LLM selects, runs and summarises the right tools. The LLM never performs the climate mathematics itself.
 
+## Technologies
+
+Python · Xarray · Dask · SciPy · Streamlit · Agentic AI · LLM function calling · CMIP6
+
 ## Scope and disclaimer
 
 This work is for **research and exploratory analysis only**. It is not a validated climate-science product, operational forecast tool, or substitute for peer-reviewed scientific analysis. The outputs are intended to illustrate how an agentic AI interface can make established climate diagnostics more accessible while keeping all numerical calculations deterministic and reproducible. All extreme indices, bias metrics, trend statistics and maps are computed by checked-in Python / Xarray / SciPy functions; the LLM only orchestrates tool calls and interprets the returned results. Its interpretation is not independent scientific evidence and should not be treated as attribution.
