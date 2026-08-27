@@ -147,10 +147,10 @@ The app has two tabs:
 
 ## Future expansion
 
-- Develop more advanced agentic AI workflows for automated selection, execution and interpretation of multiple climate-extreme diagnostics and analysis tasks.
-- Extend the framework to high-resolution climate simulations, enabling automated extraction and analysis of precipitation and other weather/climate extremes from kilometre-scale datasets.
-- Expand scientific analysis capabilities to include seasonal and interannual variability, statistical validation and relationships with large-scale climate modes such as NAO and ENSO.
-  
+- **Develop more advanced agentic AI workflows** for automated selection, execution and interpretation of multiple climate-extreme diagnostics and analysis tasks.
+- **Extend the framework to high-resolution climate simulations**, enabling automated extraction and analysis of precipitation and other weather and climate extremes from kilometre-scale datasets.
+- **Expand scientific analysis capabilities** to include seasonal and interannual variability, statistical validation and relationships with large-scale climate modes such as NAO and ENSO.
+
 ## License
 
 Research use only.
