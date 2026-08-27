@@ -57,7 +57,7 @@ The LLM is used for orchestration and interpretation, not for numerical computat
 - **Groq** (OpenAI-compatible): main diagnostic agent with model selection. Follows system instructions more strictly.
 - **Ollama** (local): optional figure interpretation via vision models (Ministral 3, Gemma 4, Qwen 2.5-VL). Requires local model download.
 
-Neither provider invents computed results for data that is not in the demo datasets.
+The agent is instructed to distinguish computed results from information not available in the demo datasets.
 
 ## Project structure
 
@@ -143,12 +143,10 @@ The app has two tabs:
 
 ## Future expansion
 
-- ERA5 as an additional observational reference for Europe.
-- Seasonal/annual cycle and interannual variability tools for Germany.
-- Taylor diagrams and PDF comparisons for statistical validation.
-- External data tools for teleconnection indices (NAO, ENSO, etc.).
-- CI/CD with GitHub Actions for linting and tests.
-
+- Develop more advanced agentic AI workflows for automated selection, execution and interpretation of multiple climate-extreme diagnostics and analysis tasks.
+- Extend the framework to high-resolution climate simulations, enabling automated extraction and analysis of precipitation and other weather/climate extremes from kilometre-scale datasets.
+- Expand scientific analysis capabilities to include seasonal and interannual variability, statistical validation and relationships with large-scale climate modes such as NAO and ENSO.
+  
 ## License
 
 Research use only.
