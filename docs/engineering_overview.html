@@ -1,0 +1,277 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>How it is built · Climate Extremes AI Agent</title>
+<style>
+:root{--bg:#f9f9f7;--surface:#fcfcfb;--ink:#0b0b0b;--ink2:#52514e;--muted:#898781;--line:#e1e0d9;--axis:#c3c2b7;
+--blue:#2a78d6;--blue-soft:#cde2fb;--orange:#eb6834;--orange-soft:#fbe0d4;--aqua:#1baf7a;--aqua-soft:#d3f1e5;--yellow:#eda100;--yellow-soft:#fcefc9;--violet:#4a3aa7;--violet-soft:#e2def7;}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){--bg:#0d0d0d;--surface:#1a1a19;--ink:#ffffff;--ink2:#c3c2b7;--muted:#898781;--line:#2c2c2a;--axis:#383835;
+--blue:#3987e5;--blue-soft:#17324f;--orange:#d95926;--orange-soft:#3d2216;--aqua:#199e70;--aqua-soft:#12342a;--yellow:#c98500;--yellow-soft:#3a2d0c;--violet:#9085e9;--violet-soft:#2a2550;}}
+:root[data-theme="dark"]{--bg:#0d0d0d;--surface:#1a1a19;--ink:#ffffff;--ink2:#c3c2b7;--muted:#898781;--line:#2c2c2a;--axis:#383835;
+--blue:#3987e5;--blue-soft:#17324f;--orange:#d95926;--orange-soft:#3d2216;--aqua:#199e70;--aqua-soft:#12342a;--yellow:#c98500;--yellow-soft:#3a2d0c;--violet:#9085e9;--violet-soft:#2a2550;}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.55 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+main{max-width:1060px;margin:0 auto;padding:28px 16px 64px}
+h1{font-size:26px;margin:0 0 4px}
+h2{font-size:19px;margin:40px 0 8px}
+p.lead{color:var(--ink2);margin:0 0 20px;max-width:760px}
+p{max-width:780px}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:16px 18px;margin:12px 0}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:12px}
+.grid .card{margin:0}
+.card h3{font-size:15px;margin:0 0 6px}
+.card p{margin:0;color:var(--ink2);font-size:14px}
+.tag{display:inline-block;font-size:12px;padding:1px 8px;border-radius:10px;margin-bottom:6px}
+.tag.blue{background:var(--blue-soft);color:var(--blue)} .tag.orange{background:var(--orange-soft);color:var(--orange)}
+.tag.aqua{background:var(--aqua-soft);color:var(--aqua)} .tag.violet{background:var(--violet-soft);color:var(--violet)}
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin:16px 0}
+.stat{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:12px 14px}
+.stat b{display:block;font-size:24px;font-weight:600}
+.stat span{color:var(--ink2);font-size:13px}
+table{border-collapse:collapse;width:100%;font-size:14px;background:var(--surface)}
+th,td{border-bottom:1px solid var(--line);padding:7px 10px;text-align:left;vertical-align:top}
+th{color:var(--ink2);font-weight:600}
+td.num{text-align:right;font-variant-numeric:tabular-nums}
+.wrap{overflow-x:auto}
+svg text{font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+.svgbox{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:10px;overflow-x:auto}
+.note{color:var(--muted);font-size:13px}
+</style>
+<meta name="description" content="How precipitation data are found and fetched through five public data services, harmonised into a 14 MB compressed store, and analysed by a tool-bounded AI agent that runs only deterministic diagnostics.">
+<meta name="author" content="Himansu Kesari Pradhan">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%232a78d6'/%3E%3Cpath d='M5 20c4-8 8-8 11 0s7 8 11 0' stroke='white' stroke-width='3' fill='none'/%3E%3C/svg%3E">
+<style>
+.sitenav{position:sticky;top:0;z-index:10;background:var(--surface,#fcfcfb);border-bottom:1px solid var(--line,#e1e0d9)}
+.sitenav div{max-width:1100px;margin:0 auto;padding:10px 16px;display:flex;flex-wrap:wrap;gap:6px 18px;align-items:center;font:14px system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+.sitenav b{margin-right:8px;color:var(--ink,#0b0b0b)}
+.sitenav a{color:var(--ink2,#52514e);text-decoration:none}
+.sitenav a:hover,.sitenav a.here{color:var(--blue,#2a78d6)}
+.sitefoot{border-top:1px solid var(--line,#e1e0d9);margin-top:32px;background:var(--surface,#fcfcfb);color:var(--ink2,#52514e)}
+.sitefoot div.in{max-width:1100px;margin:0 auto;padding:18px 16px 26px;display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:14px 28px;font:13px/1.5 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+.sitefoot b{display:block;color:var(--ink,#0b0b0b);margin-bottom:3px}
+.sitefoot a{color:var(--blue,#2a78d6)}
+.sitefoot p{margin:0}
+</style>
+</head>
+<body>
+<!-- site:nav --><nav class="sitenav"><div><b>Climate Extremes AI Agent</b><a href="engineering_overview.html" class="here">How it is built</a><a href="https://climate-extremes-ai-agent.streamlit.app/">Live app</a><a href="https://github.com/TunaHim/Climate-Extremes-AI-Agent">Code on GitHub</a></div></nav><!-- /site:nav -->
+<main>
+<h1>How the data pipeline works</h1>
+<p class="lead">This page covers the data and software side of the Climate Extremes AI Agent. It shows how precipitation data are
+pulled from five public data services, each with its own access method. It then follows how they become a small compressed demo
+store, and how an AI agent runs fixed, deterministic diagnostics on that store without ever doing the climate maths itself.</p>
+
+<div class="stats">
+  <div class="stat"><b>5 data services</b><span>CDS API, ESGF search, OPeNDAP, DestinE STAC, NOAA HTTPS</span></div>
+  <div class="stat"><b>14 MB</b><span>compressed NetCDF demo store shipped with the app</span></div>
+  <div class="stat"><b>11 tools</b><span>registered for the agent, schemas built from the code</span></div>
+  <div class="stat"><b>≤ 3 rounds</b><span>of tool calls per question, then a forced summary</span></div>
+  <div class="stat"><b>60 s</b><span>hard time limit for the sandboxed code tool</span></div>
+  <div class="stat"><b>~5,400 lines</b><span>of Python in scripts, library and app</span></div>
+</div>
+
+<h2>1. The pipeline at a glance</h2>
+<p>Data flows from left to right. Each box is one stage, and the blue text names the code that does it. The access scripts run once.
+The deployed app works only from the demo store.</p>
+<div class="svgbox">
+<svg viewBox="0 0 1000 420" width="100%" role="img" aria-label="Pipeline from data services to the agent and dashboard">
+  <defs><marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--muted)"/></marker></defs>
+  <text x="10" y="22" font-size="13" font-weight="600" fill="var(--ink2)">1 · SERVICES</text>
+  <rect x="10" y="34" width="190" height="52" rx="8" fill="var(--blue-soft)" stroke="var(--blue)"/>
+  <text x="22" y="55" font-size="13" font-weight="600" fill="var(--ink)">Copernicus CDS</text>
+  <text x="22" y="73" font-size="12" fill="var(--ink2)">ERA5, cdsapi request queue</text>
+  <rect x="10" y="94" width="190" height="52" rx="8" fill="var(--blue-soft)" stroke="var(--blue)"/>
+  <text x="22" y="115" font-size="13" font-weight="600" fill="var(--ink)">ESGF</text>
+  <text x="22" y="133" font-size="12" fill="var(--ink2)">CMIP6, search API + OPeNDAP</text>
+  <rect x="10" y="154" width="190" height="52" rx="8" fill="var(--blue-soft)" stroke="var(--blue)"/>
+  <text x="22" y="175" font-size="13" font-weight="600" fill="var(--ink)">NOAA PSL THREDDS</text>
+  <text x="22" y="193" font-size="12" fill="var(--ink2)">CPC, OPeNDAP + HTTPS</text>
+  <rect x="10" y="214" width="190" height="52" rx="8" fill="var(--blue-soft)" stroke="var(--blue)"/>
+  <text x="22" y="235" font-size="13" font-weight="600" fill="var(--ink)">DestinE HDA</text>
+  <text x="22" y="253" font-size="12" fill="var(--ink2)">Climate DT, STAC search</text>
+
+  <text x="225" y="22" font-size="13" font-weight="600" fill="var(--ink2)">2 · ACCESS</text>
+  <rect x="225" y="34" width="175" height="232" rx="8" fill="var(--surface)" stroke="var(--axis)"/>
+  <text x="237" y="56" font-size="13" font-weight="600" fill="var(--ink)">Access scripts</text>
+  <text x="237" y="78" font-size="12" fill="var(--ink2)">① search the catalogue</text>
+  <text x="251" y="94" font-size="12" fill="var(--ink2)">(Solr JSON, STAC POST)</text>
+  <text x="237" y="114" font-size="12" fill="var(--ink2)">② subset on the server</text>
+  <text x="251" y="130" font-size="12" fill="var(--ink2)">(OPeNDAP, CDS area)</text>
+  <text x="237" y="150" font-size="12" fill="var(--ink2)">③ log in where needed</text>
+  <text x="251" y="166" font-size="12" fill="var(--ink2)">(CDS key, DESP token)</text>
+  <text x="237" y="186" font-size="12" fill="var(--ink2)">④ wait for queued orders</text>
+  <text x="237" y="206" font-size="12" fill="var(--ink2)">⑤ retry on 5xx errors</text>
+  <text x="237" y="252" font-size="11" fill="var(--blue)">scripts/download_*.py</text>
+
+  <text x="425" y="22" font-size="13" font-weight="600" fill="var(--ink2)">3 · PREPARE</text>
+  <rect x="425" y="34" width="160" height="232" rx="8" fill="var(--aqua-soft)" stroke="var(--aqua)"/>
+  <text x="437" y="56" font-size="13" font-weight="600" fill="var(--ink)">Demo store</text>
+  <text x="437" y="78" font-size="12" fill="var(--ink2)">units to mm/day</text>
+  <text x="437" y="98" font-size="12" fill="var(--ink2)">regrid to a common</text>
+  <text x="437" y="114" font-size="12" fill="var(--ink2)">0.5° grid</text>
+  <text x="437" y="134" font-size="12" fill="var(--ink2)">cut to regions, monthly</text>
+  <text x="437" y="150" font-size="12" fill="var(--ink2)">means for 1995–2014</text>
+  <text x="437" y="170" font-size="12" fill="var(--ink2)">zlib-compressed NetCDF,</text>
+  <text x="437" y="186" font-size="12" fill="var(--ink2)">6 files, 14 MB</text>
+  <text x="437" y="238" font-size="11" fill="var(--blue)">create_demo_data.py</text>
+  <text x="437" y="252" font-size="11" fill="var(--blue)">utils/regrid.py · data/demo/</text>
+
+  <text x="610" y="22" font-size="13" font-weight="600" fill="var(--ink2)">4 · AGENT</text>
+  <rect x="610" y="34" width="180" height="232" rx="8" fill="var(--violet-soft)" stroke="var(--violet)"/>
+  <text x="622" y="56" font-size="13" font-weight="600" fill="var(--ink)">ReAct loop</text>
+  <text x="622" y="78" font-size="12" fill="var(--ink2)">Gemini or Groq picks</text>
+  <text x="622" y="94" font-size="12" fill="var(--ink2)">tools from the registry</text>
+  <text x="622" y="114" font-size="12" fill="var(--ink2)">TF-IDF lookup of dataset,</text>
+  <text x="622" y="130" font-size="12" fill="var(--ink2)">region and index facts</text>
+  <text x="622" y="150" font-size="12" fill="var(--ink2)">Python runs the tool,</text>
+  <text x="622" y="166" font-size="12" fill="var(--ink2)">the LLM only reads the</text>
+  <text x="622" y="182" font-size="12" fill="var(--ink2)">result and explains it</text>
+  <text x="622" y="202" font-size="12" fill="var(--ink2)">max 3 rounds, then a</text>
+  <text x="622" y="218" font-size="12" fill="var(--ink2)">text-only summary</text>
+  <text x="622" y="252" font-size="11" fill="var(--blue)">ai/agent.py · ai/knowledge.py</text>
+
+  <text x="815" y="22" font-size="13" font-weight="600" fill="var(--ink2)">5 · RESULTS</text>
+  <rect x="815" y="34" width="175" height="110" rx="8" fill="var(--surface)" stroke="var(--axis)"/>
+  <text x="827" y="56" font-size="13" font-weight="600" fill="var(--ink)">Diagnostics</text>
+  <text x="827" y="76" font-size="12" fill="var(--ink2)">RX1day, RX5day, R95p,</text>
+  <text x="827" y="92" font-size="12" fill="var(--ink2)">bias, trends, correlation,</text>
+  <text x="827" y="108" font-size="12" fill="var(--ink2)">distribution fits</text>
+  <text x="827" y="132" font-size="11" fill="var(--blue)">diagnostics/ · ai/stats.py</text>
+  <rect x="815" y="156" width="175" height="110" rx="8" fill="var(--surface)" stroke="var(--axis)"/>
+  <text x="827" y="178" font-size="13" font-weight="600" fill="var(--ink)">Streamlit app</text>
+  <text x="827" y="198" font-size="12" fill="var(--ink2)">figures + JSON sidecar</text>
+  <text x="827" y="214" font-size="12" fill="var(--ink2)">with metadata, activity</text>
+  <text x="827" y="230" font-size="12" fill="var(--ink2)">trace, interpretation</text>
+  <text x="827" y="254" font-size="11" fill="var(--blue)">dashboard/streamlit_app.py</text>
+
+  <line x1="200" y1="60" x2="223" y2="110" stroke="var(--muted)" stroke-width="1.5" marker-end="url(#arrow)"/>
+  <line x1="200" y1="120" x2="223" y2="130" stroke="var(--muted)" stroke-width="1.5" marker-end="url(#arrow)"/>
+  <line x1="200" y1="180" x2="223" y2="160" stroke="var(--muted)" stroke-width="1.5" marker-end="url(#arrow)"/>
+  <line x1="200" y1="240" x2="223" y2="190" stroke="var(--muted)" stroke-width="1.5" marker-end="url(#arrow)"/>
+  <line x1="400" y1="150" x2="423" y2="150" stroke="var(--muted)" stroke-width="1.5" marker-end="url(#arrow)"/>
+  <line x1="585" y1="150" x2="608" y2="150" stroke="var(--muted)" stroke-width="1.5" marker-end="url(#arrow)"/>
+  <line x1="790" y1="90" x2="813" y2="90" stroke="var(--muted)" stroke-width="1.5" marker-end="url(#arrow)"/>
+  <line x1="790" y1="210" x2="813" y2="210" stroke="var(--muted)" stroke-width="1.5" marker-end="url(#arrow)"/>
+  <line x1="902" y1="144" x2="902" y2="154" stroke="var(--muted)" stroke-width="1.5" marker-end="url(#arrow)"/>
+
+  <rect x="10" y="296" width="980" height="100" rx="8" fill="var(--surface)" stroke="var(--line)"/>
+  <text x="24" y="320" font-size="13" font-weight="600" fill="var(--ink)">What the demo store holds</text>
+  <text x="24" y="342" font-size="12" fill="var(--ink2)">CMIP6 MPI-ESM1-2-HR historical precipitation: global monthly 2013, and Germany monthly 1995–2014.</text>
+  <text x="24" y="360" font-size="12" fill="var(--ink2)">NOAA CPC gauge-based precipitation: Europe and South Asia daily 2013, global monthly 2013 regridded, and Germany monthly 1995–2014.</text>
+  <text x="24" y="378" font-size="12" fill="var(--ink2)">The ERA5 and DestinE scripts show how those services are reached. Their data are not part of the shipped demo store.</text>
+</svg>
+</div>
+
+<h2>2. Five services, five ways in</h2>
+<p>Each data service has its own way of finding data, logging in and delivering it. The scripts in <code>scripts/</code> are small,
+readable examples of each one.</p>
+<div class="wrap">
+<table>
+<thead><tr><th>Service</th><th>How data are found</th><th>How data are delivered</th><th>Login</th><th>Script</th></tr></thead>
+<tbody>
+<tr><td><b>Copernicus Climate Data Store</b> (ERA5)</td><td>Named dataset plus a request dictionary: variable, dates, hours</td><td>The request is queued on the server and cut to a Europe box there, then returned as NetCDF</td><td>CDS API key</td><td>download_era5_precip.py</td></tr>
+<tr><td><b>ESGF search</b> (CMIP6)</td><td>Search API with facets (project, source_id, experiment_id, table_id, member_id) returning Solr JSON</td><td>File records are filtered by the date range in the file name, then fetched over HTTPS</td><td>none</td><td>download_cmip6_precip.py</td></tr>
+<tr><td><b>ESGF and NOAA THREDDS</b> (OPeNDAP)</td><td>Known dataset URLs per year or per 5-year file</td><td>OPeNDAP subsetting: only the Germany box travels over the network, never the global file</td><td>none</td><td>download_germany_20yr.py</td></tr>
+<tr><td><b>DestinE Harmonised Data Access</b> (Climate DT)</td><td>STAC search (POST <code>/stac/search</code>) on collection DT_CLIMATE_ADAPTATION, filtered by model, experiment, resolution and parameter</td><td>An order is placed, the script polls while the server answers 202 (queued), then streams the file</td><td>DestinE platform account, bearer token, Climate DT access check</td><td>download_destine_precip.py</td></tr>
+<tr><td><b>NOAA PSL</b> (CPC)</td><td>Fixed file pattern per year</td><td>Plain HTTPS download</td><td>none</td><td>download_cpc_precip.py</td></tr>
+</tbody>
+</table>
+</div>
+
+<h2>3. Problems the pipeline had to solve</h2>
+<div class="grid">
+  <div class="card"><span class="tag orange">transfer size</span><h3>Don't download the globe</h3>
+  <p>Twenty years of daily global data would be large. For Germany, OPeNDAP cuts the box on the server, so only the subset is sent, and
+  the CDS request asks for a Europe area instead of the whole globe.</p></div>
+  <div class="card"><span class="tag orange">conventions</span><h3>Different grids and units</h3>
+  <p>CMIP6 comes in kg m⁻² s⁻¹ and is converted to mm/day. Longitudes run 0–360° in one source and −180–180° in another, and latitude
+  order differs. The subset code checks the latitude direction before slicing, and fields are regridded to a common 0.5° grid.</p></div>
+  <div class="card"><span class="tag orange">regridding</span><h3>A safe fallback</h3>
+  <p>xESMF is used for regridding when it is installed. Otherwise the code falls back to xarray interpolation, so the app still runs on a
+  host without the heavier library.</p></div>
+  <div class="card"><span class="tag blue">asynchronous services</span><h3>Queued orders</h3>
+  <p>DestinE and the CDS do not hand over files at once. The DestinE script follows the order's Location header and polls every five
+  seconds until the file is ready. Requests are retried automatically on 500–504 errors.</p></div>
+  <div class="card"><span class="tag blue">credentials</span><h3>Secrets stay out of the code</h3>
+  <p>DestinE credentials come from environment variables, a local .env file or a password prompt. LLM keys come from Streamlit secrets.
+  None of them is stored in the repository.</p></div>
+  <div class="card"><span class="tag blue">deployment</span><h3>Small enough to ship</h3>
+  <p>The demo files are re-saved with zlib compression (level 5), without losing data, so the whole store is 14 MB and the free app host
+  needs no download at start-up.</p></div>
+  <div class="card"><span class="tag aqua">deterministic</span><h3>The LLM never does the maths</h3>
+  <p>Extreme indices, biases, trends and fits are checked-in Python, xarray and SciPy functions. The JSON schema for each tool is built
+  automatically from the function's signature and docstring, so the agent's view of a tool always matches the code.</p></div>
+  <div class="card"><span class="tag aqua">guard rails</span><h3>Bounded and sandboxed</h3>
+  <p>The agent stops after three rounds of tool calls and must then summarise. The fallback code tool checks scripts for imports and
+  unsafe calls before running them. It then runs them in a separate process with a 60-second limit and read access to the project data folders only.</p></div>
+</div>
+
+<h2>4. How the code is organised</h2>
+<div class="svgbox">
+<svg viewBox="0 0 1000 190" width="100%" role="img" aria-label="Layers of the code">
+  <defs><marker id="arrow2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--muted)"/></marker></defs>
+  <rect x="20" y="20" width="300" height="150" rx="8" fill="var(--surface)" stroke="var(--axis)"/>
+  <text x="36" y="44" font-size="13" font-weight="600" fill="var(--ink)">Access layer</text>
+  <text x="36" y="66" font-size="12" fill="var(--ink2)">scripts/download_*.py · create_demo_data.py</text>
+  <text x="36" y="82" font-size="12" fill="var(--ink2)">compress_germany_files.py</text>
+  <text x="36" y="108" font-size="12" fill="var(--ink2)">One script per service, plus the steps that</text>
+  <text x="36" y="124" font-size="12" fill="var(--ink2)">turn downloads into the demo store.</text>
+  <rect x="350" y="20" width="300" height="150" rx="8" fill="var(--surface)" stroke="var(--axis)"/>
+  <text x="366" y="44" font-size="13" font-weight="600" fill="var(--ink)">Science layer</text>
+  <text x="366" y="66" font-size="12" fill="var(--ink2)">diagnostics/ · utils/ · plotting/ · ai/stats.py</text>
+  <text x="366" y="92" font-size="12" fill="var(--ink2)">ETCCDI indices, climatologies, bias, trends,</text>
+  <text x="366" y="108" font-size="12" fill="var(--ink2)">pattern correlation, distribution fits, maps.</text>
+  <text x="366" y="124" font-size="12" fill="var(--ink2)">Each figure is saved with a JSON sidecar</text>
+  <text x="366" y="140" font-size="12" fill="var(--ink2)">holding its metadata.</text>
+  <rect x="680" y="20" width="300" height="150" rx="8" fill="var(--surface)" stroke="var(--axis)"/>
+  <text x="696" y="44" font-size="13" font-weight="600" fill="var(--ink)">Agent and app layer</text>
+  <text x="696" y="66" font-size="12" fill="var(--ink2)">ai/agent.py · tools.py · knowledge.py</text>
+  <text x="696" y="82" font-size="12" fill="var(--ink2)">code_sandbox.py · dashboard/</text>
+  <text x="696" y="108" font-size="12" fill="var(--ink2)">Tool registry, the TF-IDF knowledge base</text>
+  <text x="696" y="124" font-size="12" fill="var(--ink2)">built from the NetCDF attributes, the</text>
+  <text x="696" y="140" font-size="12" fill="var(--ink2)">ReAct loop and the Streamlit interface.</text>
+  <line x1="320" y1="95" x2="348" y2="95" stroke="var(--muted)" stroke-width="1.5" marker-end="url(#arrow2)"/>
+  <line x1="650" y1="95" x2="678" y2="95" stroke="var(--muted)" stroke-width="1.5" marker-end="url(#arrow2)"/>
+</svg>
+</div>
+<div class="wrap" style="margin-top:12px">
+<table>
+<thead><tr><th>Safeguard</th><th>What it does</th></tr></thead>
+<tbody>
+<tr><td>Fixed tool registry</td><td>The agent can call only the 11 registered functions. An unknown tool name comes back as an error, and when a tool fails the agent stops instead of answering from incomplete results.</td></tr>
+<tr><td>Activity trace</td><td>Every question shows which tools ran, with which arguments and with what result, next to the answer.</td></tr>
+<tr><td>Fallback for broken tool calls</td><td>If a model returns malformed tool-call JSON, the agent falls back to a plain text answer instead of crashing.</td></tr>
+<tr><td>Metadata from the files</td><td>The knowledge base reads dimensions, variables and attributes straight from the NetCDF files, so answers about the data match the data.</td></tr>
+<tr><td>Pinned environment</td><td>environment.yml and requirements.txt pin versions, including numpy &lt; 2 for Cartopy, and packages.txt lists the system libraries for the cloud host.</td></tr>
+</tbody>
+</table>
+</div>
+
+<h2>5. What could come next</h2>
+<div class="wrap">
+<table>
+<thead><tr><th>Step</th><th>Why</th></tr></thead>
+<tbody>
+<tr><td>Automated tests and CI</td><td>The extreme indices and statistics are good candidates for small offline tests on GitHub Actions.</td></tr>
+<tr><td>Km-scale DestinE data</td><td>The STAC access route already exists. Adding Climate DT precipitation to the store would move the extremes to km-scale models.</td></tr>
+<tr><td>Cloud-native store</td><td>Saving the prepared data as chunked Zarr would let the app read larger, multi-year datasets lazily.</td></tr>
+</tbody>
+</table>
+</div>
+
+<h2>6. In one sentence</h2>
+<div class="card"><p style="color:var(--ink);font-size:15px">Precipitation data are found and fetched through five public services: an API request queue, a search API, OPeNDAP server-side subsetting, a STAC catalogue with token login and plain HTTPS. They are harmonised and compressed into a 14 MB store. A tool-bounded AI agent then runs only deterministic, checked-in diagnostics on that store and shows every step it took.</p></div>
+</main>
+<!-- site:foot --><footer class="sitefoot"><div class="in">
+<div><b>Climate Extremes AI Agent</b><p>A prototype by Himansu Kesari Pradhan, 2026, for research and exploratory use only. Source on
+<a href="https://github.com/TunaHim/Climate-Extremes-AI-Agent">GitHub</a>. Page built 6 November 2026.</p></div>
+<div><b>Data credits</b><p>CMIP6 MPI-ESM1-2-HR: Max Planck Institute for Meteorology, via ESGF. CPC Global Unified Gauge-Based Precipitation: NOAA PSL.
+ERA5: Copernicus Climate Change Service. Climate DT: Destination Earth (ECMWF, ESA, EUMETSAT).</p></div>
+<div><b>More</b><p><a href="https://climate-extremes-ai-agent.streamlit.app/">Live app</a> ·
+<a href="https://github.com/TunaHim/Climate-Extremes-AI-Agent#readme">README</a> ·
+<a href="https://github.com/TunaHim/Climate-Extremes-AI-Agent/issues">Questions and comments</a></p></div>
+</div></footer><!-- /site:foot -->
+</body>
+</html>
