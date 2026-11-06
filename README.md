@@ -53,6 +53,20 @@ The agent shows its execution trace and is instructed to always state data limit
 
 Only Germany has a multi-year (1995-2014) monthly record. Global and regional daily extremes are limited to 2013. The repository ships with ~15 MB of demo data so the Streamlit app works out of the box.
 
+## Data access
+
+The download helpers in `scripts/` show several machine-to-machine access routes:
+
+| Script | Source | Access method |
+|---|---|---|
+| `download_era5_precip.py` | ERA5 hourly precipitation | Copernicus Climate Data Store API (`cdsapi`) |
+| `download_cmip6_precip.py` | CMIP6 MPI-ESM1-2-HR daily precipitation | ESGF search API, then HTTPS download |
+| `download_germany_20yr.py` | CPC and CMIP6, Germany only, 1995–2014 | OPeNDAP (THREDDS) server-side subsetting, so only the Germany box is transferred |
+| `download_destine_precip.py` | DestinE IFS-FESOM precipitation | DestinE Harmonised Data Access (HDA) STAC search API |
+| `download_cpc_precip.py` | NOAA CPC gauge-based precipitation | HTTPS (NOAA PSL) |
+
+`create_demo_data.py` and `compress_germany_files.py` turn these into the ~15 MB compressed NetCDF demo set that ships with the app.
+
 ## AI models / providers
 
 The LLM is used for orchestration and interpretation, not for numerical computation.
