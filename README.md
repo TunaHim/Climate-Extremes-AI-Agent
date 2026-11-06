@@ -4,6 +4,8 @@ Live demo: https://climate-extremes-ai-agent.streamlit.app/
 
 An agentic AI prototype for reproducible, interactive analysis of precipitation extremes and climate model evaluation. The dashboard puts an agentic AI layer in front of deterministic climate diagnostics: ask a question in plain language and a multi-provider LLM selects, runs and summarises the right tools. The LLM never performs the climate mathematics itself.
 
+**How it is built:** a one-page overview of the data pipeline (five data services → compressed demo store → tool-bounded agent) is in [`docs/engineering_overview.html`](docs/engineering_overview.html), published at https://tunahim.github.io/Climate-Extremes-AI-Agent/engineering_overview.html once GitHub Pages is enabled.
+
 ## Technologies
 
 Python · Xarray · Dask · SciPy · Streamlit · Agentic AI · LLM function calling · CMIP6
